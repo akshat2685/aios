@@ -115,6 +115,12 @@ export class AIOSKernel {
         this.logger.warn(`Connectors failed to start: ${connError.message}`);
       }
 
+      try {
+        await this.agents.init();
+      } catch (agentError: any) {
+        this.logger.warn(`Agent orchestrator initialization failed: ${agentError.message}`);
+      }
+
       this.isRunning = true;
       this.logger.info('AIOS Kernel Online. System Ready.');
     } catch (error: any) {

@@ -8,6 +8,7 @@ export abstract class BaseAgent {
   protected logger: CoreLogger;
   public state: AgentState;
   protected tools: Map<string, AgentTool> = new Map();
+  public additionalSystemContext: string = '';
 
   constructor(name: string, role: string, router: LLMRouter, logger: CoreLogger) {
     this.router = router;
@@ -31,7 +32,21 @@ export abstract class BaseAgent {
 
     const agentKey = this.state.name.toLowerCase();
     const overrides = ConfigManager.get('agents.modelOverrides') || {};
-    const overrideModel = overrides[agentKey]?.model || (this.state.role === 'Coder' ? 'qwen2.5-coder' : 'qwen2.5');
+    const cloudMode = ConfigManager.get('cloudMode', 'local');
+    
+    let overrideModel = overrides[agentKey]?.model;
+    
+    // Auto-route based on Cloud Mode if no manual override exists
+    if (!overrideModel) {
+      if (cloudMode === 'online') {
+        // Use paid Gemini models to conserve free-tier API limits on other providers
+        if (agentKey === 'coder' || agentKey === 'planner') overrideModel = 'gemini-1.5-pro';
+        else overrideModel = 'gemini-1.5-flash';
+      } else {
+        if (agentKey === 'coder') overrideModel = 'qwen2.5-coder:3b';
+        else overrideModel = 'llama3.2';
+      }
+    }
 
     // Build tool descriptions
     let toolPrompt = '';
@@ -52,7 +67,7 @@ Explain your reasoning in a "Thought:" section before writing the tool call.
 When you are done and have the final answer, respond directly to the user without calling any tools.`;
     }
 
-    const systemPrompt = this.getSystemPrompt() + toolPrompt;
+    const systemPrompt = this.getSystemPrompt() + '\n\n' + this.additionalSystemContext + toolPrompt;
     
     // Copy conversation history
     const conversationHistory = [...history, message];

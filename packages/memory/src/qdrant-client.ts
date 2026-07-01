@@ -1,5 +1,4 @@
 import { ConfigManager } from '@aios/config';
-import { Api, Distance } from 'qdrant-client';
 
 export interface MemoryRecord {
   id: string;
@@ -18,26 +17,30 @@ export interface MemorySearchOptions {
 }
 
 export class MemoryClient {
-  private client: Api<unknown>;
+  private client: any;
   private collectionName: string;
   private config: any;
 
   constructor() {
     this.config = ConfigManager.get('memory') || {};
     this.collectionName = this.config.collectionName || 'aios_memory';
-    
-    this.client = new Api<unknown>({
-      baseUrl: this.config.qdrantUrl || 'http://localhost:6333',
-      baseApiParams: this.config.qdrantApiKey ? {
-        headers: {
-          'api-key': this.config.qdrantApiKey
-        }
-      } : undefined
-    });
   }
 
   async init(): Promise<void> {
     try {
+      const qdrant = await import('qdrant-client');
+      const Api = qdrant.Api;
+      const Distance = qdrant.Distance;
+
+      this.client = new Api({
+        baseUrl: this.config.qdrantUrl || 'http://localhost:6333',
+        baseApiParams: this.config.qdrantApiKey ? {
+          headers: {
+            'api-key': this.config.qdrantApiKey
+          }
+        } : undefined
+      });
+
       // Check if collection exists
       let collectionExists = false;
       try {

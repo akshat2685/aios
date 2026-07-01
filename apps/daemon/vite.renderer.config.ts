@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  root: path.resolve(__dirname, 'src/renderer'),
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -18,7 +20,7 @@ export default defineConfig({
     postcss: './postcss.config.js',
   },
   build: {
-    outDir: 'dist/renderer',
+    outDir: path.resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {

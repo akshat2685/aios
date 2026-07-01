@@ -31,6 +31,14 @@ export function createTray(mainWindow: BrowserWindow, configManager: ConfigManag
         },
         accelerator: 'CmdOrCtrl+Shift+Space',
       },
+      {
+        label: 'Agent Launcher',
+        click: () => {
+          mainWindow.show();
+          mainWindow.webContents.send('agent-launcher:toggle');
+        },
+        accelerator: 'Ctrl+Alt+Space',
+      },
       { type: 'separator' },
       {
         label: 'Settings',

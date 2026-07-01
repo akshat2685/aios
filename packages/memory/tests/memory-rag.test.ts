@@ -22,6 +22,7 @@ vi.mock('qdrant-client', () => {
   }
   return {
     Api: MockApi,
+    Distance: { Cosine: 'Cosine' },
     default: MockApi
   };
 });
@@ -56,7 +57,8 @@ global.fetch = mockFetch;
 
 describe('AIOS Memory & RAG Pipeline Tests', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockRequestFn.mockReset();
+    mockFetch.mockReset();
   });
 
   describe('Recursive Character Chunker', () => {

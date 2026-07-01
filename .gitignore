@@ -10,3 +10,11 @@ Thumbs.db
 .DS_Store
 packages/tests/sandbox/
 packages/tests/sandbox_sec/
+
+# Custom ignores
+.agents/
+set_keys.js
+set_mistral_key.js
+set_cohere_key.js
+scripts/set_keys.ts
+skills-lock.json

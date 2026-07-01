@@ -2,7 +2,7 @@
   "name": "@aios/daemon",
   "version": "0.1.0",
   "description": "AIOS Desktop Daemon - Electron Application",
-  "main": "./dist/main/index.js",
+  "main": "./dist/main/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
     "dev:main": "tsc -p tsconfig.main.json --watch",
@@ -11,7 +11,7 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build --config vite.renderer.config.ts",
     "build:installer": "electron-builder --config electron-builder.config.ts",
-    "start": "electron ./dist/main/index.js",
+    "start": "electron ./dist/main/main/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts,.tsx",

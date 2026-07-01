@@ -3,6 +3,13 @@
  * This mirrors the API exposed by preload.ts via contextBridge.
  */
 
+export interface AdkAgent {
+  name: string;
+  description: string;
+  capabilities: string[];
+  icon: string;
+}
+
 export interface ElectronAPI {
   app: {
     quit: () => Promise<void>;
@@ -22,6 +29,11 @@ export interface ElectronAPI {
   };
   agent: {
     chat: (params: { message: string; agentId?: string }) => Promise<{ message: string; done: boolean }>;
+    listAdkAgents: () => Promise<{ agents: AdkAgent[] }>;
+    launch: (agentId: string) => Promise<{ status: string; agentId: string }>;
+  };
+  launcher: {
+    hide: () => Promise<void>;
   };
   llm: {
     generate: (params: { prompt: string; model?: string; systemPrompt?: string }) => Promise<any>;
@@ -89,6 +101,21 @@ function createMockAPI(): ElectronAPI {
         message: `[Mock Response] You said: ${message}`,
         done: true,
       }),
+      listAdkAgents: async () => ({
+        agents: [
+          { name: 'planner', description: 'Break tasks into structured work items.', capabilities: ['planning', 'decomposition', 'coordination'], icon: '🧠' },
+          { name: 'research', description: 'Gather sources and synthesize findings.', capabilities: ['search', 'summarization', 'source_validation'], icon: '🔍' },
+          { name: 'coding', description: 'Generate, refactor, debug, and explain code.', capabilities: ['code_generation', 'refactoring', 'debugging'], icon: '💻' },
+          { name: 'website', description: 'Build frontend, backend, API, and database.', capabilities: ['frontend', 'backend', 'api_design', 'database_design'], icon: '🌐' },
+          { name: 'testing', description: 'Create and interpret tests.', capabilities: ['unit_tests', 'integration_tests', 'e2e_tests'], icon: '🧪' },
+          { name: 'security', description: 'Review dependencies and secret risks.', capabilities: ['dependency_scanning', 'static_analysis', 'secret_detection'], icon: '🛡️' },
+          { name: 'docs', description: 'Produce architecture and API documentation.', capabilities: ['readme', 'architecture_docs', 'api_docs'], icon: '📝' },
+        ],
+      }),
+      launch: async (agentId: string) => ({ status: 'mock', agentId }),
+    },
+    launcher: {
+      hide: async () => console.log('Mock: hide launcher'),
     },
     llm: {
       generate: async () => ({ content: 'Mock LLM response' }),

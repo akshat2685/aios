@@ -11,13 +11,14 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@aios/types": "*",
-    "@aios/llm": "*",
-    "@aios/core": "*",
     "@aios/config": "*",
-    "@aios/utils": "*",
+    "@aios/core": "*",
     "@aios/devtools": "*",
+    "@aios/llm": "*",
     "@aios/research": "*",
+    "@aios/types": "*",
+    "@aios/utils": "*",
+    "gray-matter": "^4.0.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {

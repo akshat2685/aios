@@ -18,7 +18,11 @@ const validChannels = [
   'memory:clear',
   'memory:stats',
   'agent:chat',
+  'agent:launch',
+  'agent-launcher:toggle',
   'research:conduct',
+  'adk:list-agents',
+  'launcher:hide',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -50,6 +54,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   agent: {
     chat: (message: string, agentId?: string) => ipcRenderer.invoke('agent:chat', { message, agentId }),
+    listAdkAgents: () => ipcRenderer.invoke('adk:list-agents'),
+    launch: (agentId: string) => ipcRenderer.invoke('agent:launch', { agentId }),
+  },
+  launcher: {
+    hide: () => ipcRenderer.invoke('launcher:hide'),
   },
   research: {
     conduct: (query: string) => ipcRenderer.invoke('research:conduct', { query }),
@@ -103,6 +112,11 @@ declare global {
       };
       agent: {
         chat: (message: string, agentId?: string) => Promise<any>;
+        listAdkAgents: () => Promise<{ agents: Array<{ name: string; description: string; capabilities: string[]; icon: string }> }>;
+        launch: (agentId: string) => Promise<{ status: string; agentId: string }>;
+      };
+      launcher: {
+        hide: () => Promise<void>;
       };
       research: {
         conduct: (query: string) => Promise<any>;

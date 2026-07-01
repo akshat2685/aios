@@ -13,11 +13,12 @@ export const ConfigSchema = z.object({
   autoLaunch: z.boolean().default(true),
   minimizeToTray: z.boolean().default(true),
   startMinimized: z.boolean().default(false),
+  cloudMode: z.enum(['local', 'online']).default('local'),
   llm: z.object({
     defaultProvider: z.enum(['ollama', 'lmstudio', 'openai', 'anthropic', 'local']).default('ollama'),
     ollama: z.object({
       host: z.string().default('http://localhost:11434'),
-      model: z.string().default('qwen2.5:8b'),
+      model: z.string().default('llama3.2'),
       temperature: z.number().default(0.7),
       maxTokens: z.number().default(4096),
     }),
@@ -105,11 +106,12 @@ const DEFAULT_CONFIG: Config = {
   autoLaunch: true,
   minimizeToTray: true,
   startMinimized: false,
+  cloudMode: 'local',
   llm: {
     defaultProvider: 'ollama',
     ollama: {
       host: 'http://localhost:11434',
-      model: 'qwen2.5:8b',
+      model: 'llama3.2',
       temperature: 0.7,
       maxTokens: 4096,
     },

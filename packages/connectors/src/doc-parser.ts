@@ -2,8 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import mammoth from 'mammoth';
 
-// Use require to bypass type definition mismatch on CommonJS default exports
-const pdf = require('pdf-parse');
+// pdf-parse require deferred to avoid DOMMatrix error on boot
 
 const PARSEABLE_EXTENSIONS = new Set([
   '.txt', '.md', '.markdown', '.csv', '.json', '.yaml', '.yml',
@@ -25,6 +24,8 @@ export async function parseDocument(filePath: string): Promise<ParsedDocument | 
   try {
     if (ext === '.pdf') {
       const dataBuffer = await fs.readFile(filePath);
+      // Ensure we don't crash the main process with polyfills, defer require
+      const pdf = require('pdf-parse');
       const parsed = await pdf(dataBuffer);
       return {
         content: parsed.text || '',

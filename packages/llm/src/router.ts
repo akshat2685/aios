@@ -18,6 +18,11 @@ export class LLMRouter {
   private security: SecretManager;
   public tracker: LLMTracker;
 
+  private rateLimitedProviders: Map<string, number> = new Map();
+  private quotaExhaustedProviders: Map<string, number> = new Map();
+  private readonly RATE_LIMIT_COOLING_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly QUOTA_COOLING_MS = 5 * 60 * 60 * 1000; // 5 hours
+
   constructor(config: LLMConfig, security: SecretManager, logger: CoreLogger) {
     this.config = config;
     this.security = security;
@@ -66,6 +71,17 @@ export class LLMRouter {
           throw error;
         }
 
+        // Check for Rate Limit or Quota Exhaustion
+        const msg = error.message?.toLowerCase() || '';
+        if (error.status === 429 || msg.includes('rate limit') || msg.includes('too many requests')) {
+          error.isRateLimit = true;
+          throw error;
+        }
+        if (error.status === 402 || msg.includes('quota') || msg.includes('insufficient_quota') || msg.includes('balance') || msg.includes('exhausted')) {
+          error.isQuota = true;
+          throw error;
+        }
+
         this.logger.warn(`Provider ${providerId} failed (attempt ${attempt}/${maxAttempts}): ${error.message}. Retrying in ${delay}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         delay *= 2; // exponential backoff
@@ -74,8 +90,48 @@ export class LLMRouter {
     throw new Error('Unreachable code');
   }
 
+  private isProviderCooling(providerId: string): boolean {
+    const now = Date.now();
+    if (this.rateLimitedProviders.has(providerId)) {
+      if (now - this.rateLimitedProviders.get(providerId)! < this.RATE_LIMIT_COOLING_MS) return true;
+      this.rateLimitedProviders.delete(providerId);
+    }
+    if (this.quotaExhaustedProviders.has(providerId)) {
+      if (now - this.quotaExhaustedProviders.get(providerId)! < this.QUOTA_COOLING_MS) return true;
+      this.quotaExhaustedProviders.delete(providerId);
+    }
+    return false;
+  }
+
+  private getNextAvailableProvider(): { providerId: LLMProviderId, model: string } {
+    const chain = [
+      { id: 'gemini', model: 'gemini-1.5-flash' },
+      { id: 'openai', model: 'gpt-4-turbo-preview' },
+      { id: 'anthropic', model: 'claude-3-haiku-20240307' },
+      { id: 'openrouter', model: 'mistralai/mistral-large-latest' },
+      { id: 'custom', model: 'command-r' },
+      { id: 'ollama', model: this.config.defaultModel || 'llama3.2' },
+    ] as const;
+
+    for (const step of chain) {
+      if (this.providers.has(step.id as LLMProviderId) && !this.isProviderCooling(step.id)) {
+        return { providerId: step.id as LLMProviderId, model: step.model };
+      }
+    }
+    return { providerId: 'ollama', model: this.config.defaultModel || 'llama3.2' };
+  }
+
   async generate(request: LLMRequest): Promise<LLMResponse> {
-    const providerId = this.resolveProvider(request);
+    let providerId = this.resolveProvider(request);
+    let requestModel = request.model;
+
+    if (this.isProviderCooling(providerId)) {
+      const fallback = this.getNextAvailableProvider();
+      providerId = fallback.providerId;
+      requestModel = fallback.model;
+      request = { ...request, model: requestModel };
+    }
+
     const provider = this.providers.get(providerId);
 
     if (!provider) {
@@ -92,13 +148,22 @@ export class LLMRouter {
       );
       return response;
     } catch (error: any) {
-      this.logger.error(`Provider ${providerId} failed: ${error.message}. Attempting fallback...`);
-      return await this.handleFallback(request);
+      this.logger.error(`Provider ${providerId} failed: ${error.message}. Attempting failover chain...`);
+      return await this.handleFallback(request, providerId, error);
     }
   }
 
   async *stream(request: LLMRequest): AsyncGenerator<LLMStreamResponse> {
-    const providerId = this.resolveProvider(request);
+    let providerId = this.resolveProvider(request);
+    let requestModel = request.model;
+
+    if (this.isProviderCooling(providerId)) {
+      const fallback = this.getNextAvailableProvider();
+      providerId = fallback.providerId;
+      requestModel = fallback.model;
+      request = { ...request, model: requestModel };
+    }
+
     const provider = this.providers.get(providerId);
 
     if (!provider) {
@@ -122,8 +187,8 @@ export class LLMRouter {
         this.tracker.trackUsage(providerId, request.model, promptTokens, completionTokens);
       }
     } catch (error: any) {
-      this.logger.error(`Stream failed for ${providerId}: ${error.message}. Attempting fallback stream...`);
-      yield* this.handleFallbackStream(request);
+      this.logger.error(`Stream failed for ${providerId}: ${error.message}. Attempting failover chain...`);
+      yield* this.handleFallbackStream(request, providerId, error);
     }
   }
 
@@ -149,30 +214,40 @@ export class LLMRouter {
     return this.config.defaultProvider || 'ollama';
   }
 
-  private async handleFallback(request: LLMRequest): Promise<LLMResponse> {
-    const fallbackId: LLMProviderId = 'ollama';
-    const provider = this.providers.get(fallbackId);
-    if (!provider) {
-      throw new Error(`Fallback provider ${fallbackId} is not registered`);
-    }
-    this.logger.info(`Running fallback generate on ${fallbackId} with model ${request.model}`);
+  private async handleFallback(request: LLMRequest, failedProviderId: string, error: any): Promise<LLMResponse> {
+    if (error.isRateLimit) this.rateLimitedProviders.set(failedProviderId, Date.now());
+    if (error.isQuota) this.quotaExhaustedProviders.set(failedProviderId, Date.now());
+
+    const { providerId, model } = this.getNextAvailableProvider();
+    const provider = this.providers.get(providerId);
     
-    const localRequest = { ...request, model: this.config.defaultModel || 'qwen2.5:8b' };
-    const response = await provider.generate(localRequest);
-    this.tracker.trackUsage(fallbackId, localRequest.model, response.usage.promptTokens, response.usage.completionTokens);
+    if (!provider) {
+      throw new Error(`Fallback provider ${providerId} is not registered`);
+    }
+    
+    this.logger.info(`Failing over from ${failedProviderId} to ${providerId} (model: ${model})`);
+    
+    const fallbackRequest = { ...request, model };
+    const response = await this.executeWithRetry(providerId, () => provider.generate(fallbackRequest));
+    this.tracker.trackUsage(providerId, fallbackRequest.model, response.usage.promptTokens, response.usage.completionTokens);
     return response;
   }
 
-  private async *handleFallbackStream(request: LLMRequest): AsyncGenerator<LLMStreamResponse> {
-    const fallbackId: LLMProviderId = 'ollama';
-    const provider = this.providers.get(fallbackId);
-    if (!provider) {
-      throw new Error(`Fallback provider ${fallbackId} is not registered`);
-    }
-    this.logger.info(`Running fallback stream on ${fallbackId} with model ${request.model}`);
+  private async *handleFallbackStream(request: LLMRequest, failedProviderId: string, error: any): AsyncGenerator<LLMStreamResponse> {
+    if (error.isRateLimit) this.rateLimitedProviders.set(failedProviderId, Date.now());
+    if (error.isQuota) this.quotaExhaustedProviders.set(failedProviderId, Date.now());
 
-    const localRequest = { ...request, model: this.config.defaultModel || 'qwen2.5:8b' };
-    const generator = await provider.stream(localRequest);
+    const { providerId, model } = this.getNextAvailableProvider();
+    const provider = this.providers.get(providerId);
+    
+    if (!provider) {
+      throw new Error(`Fallback provider ${providerId} is not registered`);
+    }
+    
+    this.logger.info(`Failing over stream from ${failedProviderId} to ${providerId} (model: ${model})`);
+
+    const fallbackRequest = { ...request, model };
+    const generator = await provider.stream(fallbackRequest);
     let promptTokens = 0;
     let completionTokens = 0;
 
@@ -185,7 +260,7 @@ export class LLMRouter {
     }
 
     if (promptTokens > 0 || completionTokens > 0) {
-      this.tracker.trackUsage(fallbackId, localRequest.model, promptTokens, completionTokens);
+      this.tracker.trackUsage(providerId, fallbackRequest.model, promptTokens, completionTokens);
     }
   }
 

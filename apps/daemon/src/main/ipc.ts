@@ -236,4 +236,61 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     app.relaunch();
     app.exit(0);
   });
+
+  // ─── 8. ADK Agent Launcher ─────────────────────────────────
+  const adkAgents = [
+    { name: 'planner', description: 'Break tasks into structured work items and route them to specialists.', capabilities: ['planning', 'decomposition', 'coordination'], icon: '🧠' },
+    { name: 'research', description: 'Gather sources and synthesize findings.', capabilities: ['search', 'summarization', 'source_validation'], icon: '🔍' },
+    { name: 'coding', description: 'Generate, refactor, debug, and explain code.', capabilities: ['code_generation', 'refactoring', 'debugging'], icon: '💻' },
+    { name: 'website', description: 'Build frontend, backend, API, and database work items.', capabilities: ['frontend', 'backend', 'api_design', 'database_design'], icon: '🌐' },
+    { name: 'testing', description: 'Create and interpret unit, integration, and end-to-end tests.', capabilities: ['unit_tests', 'integration_tests', 'e2e_tests'], icon: '🧪' },
+    { name: 'security', description: 'Review dependencies, static analysis findings, and secret risks.', capabilities: ['dependency_scanning', 'static_analysis', 'secret_detection'], icon: '🛡️' },
+    { name: 'docs', description: 'Produce architecture, API, and user-facing documentation.', capabilities: ['readme', 'architecture_docs', 'api_docs'], icon: '📝' },
+  ];
+
+  ipcMain.handle('adk:list-agents', async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:8765/agents');
+      const data: any = await response.json();
+      return {
+        agents: data.agents.map((a: any, i: number) => ({
+          ...a,
+          icon: adkAgents[i]?.icon || '🤖',
+        })),
+      };
+    } catch {
+      return { agents: adkAgents };
+    }
+  });
+
+  ipcMain.handle('agent:launch', async (_, { agentId }: { agentId: string }) => {
+    logger.info(`Launching agent: ${agentId}`);
+
+    // Hide the launcher window
+    const allWindows = BrowserWindow.getAllWindows();
+    for (const win of allWindows) {
+      if (win.isAlwaysOnTop()) {
+        win.hide();
+      }
+    }
+
+    // Show & focus the main window, send the agent ID to renderer
+    const main = allWindows.find((w) => !w.isAlwaysOnTop() && !w.isDestroyed());
+    if (main) {
+      main.show();
+      main.focus();
+      main.webContents.send('agent:launch', agentId);
+    }
+
+    return { status: 'launched', agentId };
+  });
+
+  ipcMain.handle('launcher:hide', async () => {
+    const allWindows = BrowserWindow.getAllWindows();
+    for (const win of allWindows) {
+      if (win.isAlwaysOnTop()) {
+        win.hide();
+      }
+    }
+  });
 }

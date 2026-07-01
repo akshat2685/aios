@@ -16,9 +16,10 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@aios/core": "*",
     "@aios/config": "*",
+    "@aios/core": "*",
     "@aios/utils": "*",
+    "@qdrant/js-client-rest": "^1.18.0",
     "qdrant-client": "latest",
     "zod": "^3.22.4"
   },

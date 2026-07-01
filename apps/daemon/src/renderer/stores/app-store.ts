@@ -12,9 +12,20 @@ export interface AppState {
   setCommandPaletteOpen: (open: boolean) => void;
   toggleCommandPalette: () => void;
 
+  // Agent Launcher
+  agentLauncherOpen: boolean;
+  setAgentLauncherOpen: (open: boolean) => void;
+  selectedAgentId: string | null;
+  setSelectedAgentId: (id: string | null) => void;
+
   // Agent statuses
   agentStatuses: Record<string, AgentStatus>;
   setAgentStatus: (agentId: string, status: AgentStatus) => void;
+
+  // Operating Mode
+  cloudMode: 'local' | 'online';
+  setCloudMode: (mode: 'local' | 'online') => void;
+  toggleCloudMode: () => void;
 
   // System
   ollamaStatus: 'online' | 'offline' | 'checking';
@@ -38,6 +49,12 @@ export const useAppStore = create<AppState>((set) => ({
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
 
+  // Agent Launcher
+  agentLauncherOpen: false,
+  setAgentLauncherOpen: (open) => set({ agentLauncherOpen: open }),
+  selectedAgentId: null,
+  setSelectedAgentId: (id) => set({ selectedAgentId: id }),
+
   // Agent statuses
   agentStatuses: {
     assistant: 'idle',
@@ -46,9 +63,14 @@ export const useAppStore = create<AppState>((set) => ({
     planner: 'idle',
   },
   setAgentStatus: (agentId, status) =>
-    set((s) => ({
-      agentStatuses: { ...s.agentStatuses, [agentId]: status },
+    set((state) => ({
+      agentStatuses: { ...state.agentStatuses, [agentId]: status },
     })),
+
+  // Operating Mode
+  cloudMode: 'local',
+  setCloudMode: (mode) => set({ cloudMode: mode }),
+  toggleCloudMode: () => set((state) => ({ cloudMode: state.cloudMode === 'local' ? 'online' : 'local' })),
 
   // System
   ollamaStatus: 'checking',

@@ -14,7 +14,7 @@
     "build": "npm run build:packages && npm run build:apps",
     "build:packages": "npm run build --workspaces --if-present",
     "build:apps": "npm run build --workspace=apps/daemon --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present -- --passWithNoTests",
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint:fix --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml}\"",
