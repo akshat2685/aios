@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist/renderer",
+    "rootDir": "./src/renderer",
+    "composite": true,
+    "tsBuildInfoFile": "./dist/renderer/tsconfig.tsbuildinfo",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/renderer/*"],
+      "@aios/types": ["../../packages/types/dist"],
+      "@aios/config": ["../../packages/config/dist"],
+      "@aios/utils": ["../../packages/utils/dist"],
+      "@aios/core": ["../../packages/core/dist"],
+      "@aios/memory": ["../../packages/memory/dist"],
+      "@aios/llm": ["../../packages/llm/dist"],
+      "@aios/agents": ["../../packages/agents/dist"],
+      "@aios/connectors": ["../../packages/connectors/dist"],
+      "@aios/devtools": ["../../packages/devtools/dist"],
+      "@aios/research": ["../../packages/research/dist"],
+      "@aios/automation": ["../../packages/automation/dist"],
+      "@aios/plugins": ["../../packages/plugins/dist"],
+      "@aios/security": ["../../packages/security/dist"],
+      "@aios/ui": ["../../packages/ui/dist"]
+    }
+  },
+  "include": ["src/renderer/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

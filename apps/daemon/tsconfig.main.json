@@ -1,0 +1,37 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist/main",
+    "rootDir": "./src",
+    "composite": true,
+    "tsBuildInfoFile": "./dist/main/tsconfig.tsbuildinfo",
+    "jsx": "react-jsx",
+    "paths": {
+      "@aios/types": ["../../packages/types/dist"],
+      "@aios/config": ["../../packages/config/dist"],
+      "@aios/utils": ["../../packages/utils/dist"],
+      "@aios/core": ["../../packages/core/dist"],
+      "@aios/memory": ["../../packages/memory/dist"],
+      "@aios/llm": ["../../packages/llm/dist"],
+      "@aios/agents": ["../../packages/agents/dist"],
+      "@aios/connectors": ["../../packages/connectors/dist"],
+      "@aios/devtools": ["../../packages/devtools/dist"],
+      "@aios/research": ["../../packages/research/dist"],
+      "@aios/automation": ["../../packages/automation/dist"],
+      "@aios/plugins": ["../../packages/plugins/dist"],
+      "@aios/security": ["../../packages/security/dist"],
+      "@aios/ui": ["../../packages/ui/dist"]
+    }
+  },
+  "include": [
+    "src/main/**/*",
+    "src/autolaunch.ts",
+    "src/crash-reporter.ts",
+    "src/ipc.ts",
+    "src/kernel.ts",
+    "src/memory-manager.ts",
+    "src/tray.ts"
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

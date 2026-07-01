@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+out/
+.env
+.env.local
+*.tsbuildinfo
+*.log
+Thumbs.db
+.DS_Store
+packages/tests/sandbox/
+packages/tests/sandbox_sec/

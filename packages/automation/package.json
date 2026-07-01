@@ -1,0 +1,27 @@
+{
+  "name": "@aios/automation",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@aios/types": "*",
+    "@aios/core": "*",
+    "@aios/utils": "*",
+    "@aios/llm": "*",
+    "node-cron": "^3.0.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  }
+}

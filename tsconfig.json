@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "noEmit": true
+  },
+  "exclude": ["node_modules", "dist", "build", "**/*.test.ts", "**/*.spec.ts"],
+  "references": [
+    { "path": "./packages/types" },
+    { "path": "./packages/config" },
+    { "path": "./packages/utils" },
+    { "path": "./packages/core" },
+    { "path": "./packages/security" },
+    { "path": "./packages/memory" },
+    { "path": "./packages/llm" },
+    { "path": "./packages/agents" },
+    { "path": "./packages/connectors" },
+    { "path": "./packages/devtools" },
+    { "path": "./packages/research" },
+    { "path": "./packages/automation" },
+    { "path": "./packages/plugins" },
+    { "path": "./packages/ui" },
+    { "path": "./apps/daemon/tsconfig.main.json" },
+    { "path": "./apps/daemon/tsconfig.renderer.json" }
+  ]
+}
