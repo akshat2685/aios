@@ -46,6 +46,13 @@ It belongs entirely to the user and runs local models offline while supporting r
 - **Cross-Agent delegation**: Exposes `agent:delegate` tool allowing agents to delegate sub-tasks to each other.
 - **Plugin Manager**: Scans and loads custom JS tools dynamically from `~/.aios/plugins/`.
 
+### 8. Dynamic Agent Skills System (Vercel Agent Skills compatible)
+- **`SkillManager`**: Automatically scans and parses `SKILL.md` files (loaded via `npx skills add`) inside `.agents/skills/` using `gray-matter`.
+- **Dynamic Prompts & Tools**: Injects skill descriptions into agent system prompts and exposes `skill:read` for agents to dynamically download instructions.
+- **`agent-reach` Integration**: Fully integrated the `agent-reach` CLI tool (giving access to YouTube, Reddit, Twitter, and 12 other platforms) to the TS `ResearchAgent` and all 7 Python ADK agents (`planner`, `research`, `coding`, `website`, `testing`, `security`, `docs`) via a native `run_agent_reach_command` tool.
+- **Background Auto-Start**: Installed a hidden VBScript runner in the Windows Startup folder to launch AIOS on boot, and placed a desktop shortcut pointing to it.
+
+
 ---
 
 ## Repository Structure
@@ -90,10 +97,21 @@ AIOS/
    ```bash
    npm run build
    ```
-4. Verify tests pass:
+4. Build the Electron renderer & main processes:
    ```bash
-   npx ts-node --transpile-only packages/tests/test-final-system.ts
+   cd apps/daemon
+   npm run build:renderer
+   npm run build:main
    ```
+5. Start the AIOS application:
+   ```bash
+   npm start
+   ```
+
+### Windows Startup & Shortcut Configurations
+- **Auto-Boot**: The installer sets up `C:\Users\ijain\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\aios.vbs` to silently launch AIOS on startup.
+- **Desktop Shortcut**: Double-click `C:\Users\ijain\Desktop\AIOS.lnk` to manually launch the AIOS daemon and window anytime. You can also drag this to your taskbar!
+
 
 ---
 
