@@ -11,6 +11,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@aios/computer": "*",
     "@aios/config": "*",
     "@aios/core": "*",
     "@aios/devtools": "*",

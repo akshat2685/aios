@@ -8,18 +8,23 @@ import { getDelegationTool } from './tools/delegation-tool';
 import { SkillManager } from './skill-manager';
 import { getSkillReadTool } from './tools/skill-tools';
 
+import { MemoryService } from '@aios/core';
+
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent> = new Map();
   private logger: CoreLogger;
   public skillManager: SkillManager;
+  private memory?: MemoryService;
 
   constructor(
     router: LLMRouter, 
     logger: CoreLogger, 
     workspacePath = 'C:\\Users\\ijain\\AIOS',
-    requestApproval?: (action: string, details: string) => Promise<boolean>
+    requestApproval?: (action: string, details: string) => Promise<boolean>,
+    memory?: MemoryService
   ) {
     this.logger = logger;
+    this.memory = memory;
     this.skillManager = new SkillManager(logger, workspacePath);
     
     // Initialize core agents
@@ -76,7 +81,30 @@ export class AgentOrchestrator {
       throw new Error(`Agent ${agentId} not found in orchestrator`);
     }
 
-    return await agent.processMessage(message, history);
+    // Inject dynamic memory context
+    let memoryContext = '';
+    if (this.memory) {
+      try {
+        const prefs = await this.memory.getGlobalPreferences();
+        if (prefs && prefs.length > 0) {
+          memoryContext = '\n<user_preferences>\n' + 
+            prefs.map((p: any) => `- ${p.metadata?.key}: ${p.content}`).join('\n') +
+            '\n</user_preferences>\n';
+        }
+      } catch (e) {
+        this.logger.warn(`Failed to fetch global preferences: ${e}`);
+      }
+    }
+    
+    // We temporarily override the agent's additionalSystemContext for this request
+    const originalContext = agent.additionalSystemContext;
+    agent.additionalSystemContext = originalContext + memoryContext;
+
+    try {
+      return await agent.processMessage(message, history);
+    } finally {
+      agent.additionalSystemContext = originalContext;
+    }
   }
 
   async broadcast(message: AgentMessage): Promise<void> {

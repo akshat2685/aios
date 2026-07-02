@@ -10,6 +10,7 @@ import { ResearchService } from '@aios/research';
 import { LLMConfig } from '@aios/types';
 import { SecretManager, GuardRail } from '@aios/security';
 import { ConfigManager } from '@aios/config';
+import { GraphService } from '@aios/graph';
 import * as os from 'os';
 
 export class AIOSKernel {
@@ -22,12 +23,16 @@ export class AIOSKernel {
   public git: GitService;
   public analyzer: CodeAnalyzer;
   public memory: MemoryService;
+  public graph: GraphService;
   public security: SecretManager;
 
   private isRunning = false;
 
-  constructor(config: LLMConfig, logger: CoreLogger) {
+  private approvalCallback?: (request: any) => Promise<boolean>;
+
+  constructor(config: LLMConfig, logger: CoreLogger, approvalCallback?: (request: any) => Promise<boolean>) {
     this.logger = logger;
+    this.approvalCallback = approvalCallback;
     this.logger.info('Initializing AIOS Kernel...');
 
     const workspacePath = process.env.AIOS_WORKSPACE_PATH || 'C:\\Users\\ijain\\AIOS';
@@ -42,6 +47,10 @@ export class AIOSKernel {
     // 2. Initialize Memory Layer
     this.memory = new MemoryService();
 
+    // 2b. Initialize Knowledge Graph
+    this.graph = new GraphService(logger);
+    this.graph.init().catch(e => logger.error(`Failed to initialize Graph Schema: ${e}`));
+
     // 3. Initialize Agent Layer
     this.agents = new AgentOrchestrator(
       this.router, 
@@ -53,7 +62,7 @@ export class AIOSKernel {
           requireApprovalFor: ['shell'],
           encryptionEnabled: false,
           airGappedMode: false
-        });
+        }, this.approvalCallback);
         return await guard.requestApproval({
           id: Math.random().toString(36).substring(7),
           agentId: 'coder',
@@ -61,7 +70,8 @@ export class AIOSKernel {
           params: { details },
           timestamp: Date.now()
         });
-      }
+      },
+      this.memory
     );
 
     // 4. Initialize Knowledge Ingestion
@@ -119,6 +129,12 @@ export class AIOSKernel {
         await this.agents.init();
       } catch (agentError: any) {
         this.logger.warn(`Agent orchestrator initialization failed: ${agentError.message}`);
+      }
+
+      try {
+        await this.automation.init();
+      } catch (autoError: any) {
+        this.logger.warn(`Automation engine initialization failed: ${autoError.message}`);
       }
 
       this.isRunning = true;

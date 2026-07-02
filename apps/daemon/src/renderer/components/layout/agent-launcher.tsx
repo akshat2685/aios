@@ -279,7 +279,7 @@ export function AgentLauncher({ standalone = false }: AgentLauncherProps) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[998] flex items-start justify-center pt-[12vh]"
+          className="fixed inset-0 z-[9999] flex items-start justify-center pt-[12vh]"
           onClick={close}
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />

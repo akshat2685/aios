@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, MessageSquare, FlaskConical, Zap, Settings,
-  PanelLeftClose, PanelLeft,
+  PanelLeftClose, PanelLeft, Database, FolderGit, ActivitySquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app-store';
@@ -10,8 +10,11 @@ import { useAppStore } from '@/stores/app-store';
 const navItems = [
   { id: 'dashboard', path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'chat', path: '/chat', label: 'Companion Chat', icon: MessageSquare },
+  { id: 'projects', path: '/projects', label: 'Projects', icon: FolderGit },
   { id: 'research', path: '/research', label: 'Research Lab', icon: FlaskConical },
   { id: 'automation', path: '/automation', label: 'Automation', icon: Zap },
+  { id: 'memory', path: '/memory', label: 'Memory', icon: Database },
+  { id: 'diagnostics', path: '/diagnostics', label: 'Diagnostics', icon: ActivitySquare },
 ];
 
 const bottomItems = [

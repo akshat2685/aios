@@ -32,21 +32,12 @@ export abstract class BaseAgent {
 
     const agentKey = this.state.name.toLowerCase();
     const overrides = ConfigManager.get('agents.modelOverrides') || {};
-    const cloudMode = ConfigManager.get('cloudMode', 'local');
-    
     let overrideModel = overrides[agentKey]?.model;
     
-    // Auto-route based on Cloud Mode if no manual override exists
-    if (!overrideModel) {
-      if (cloudMode === 'online') {
-        // Use paid Gemini models to conserve free-tier API limits on other providers
-        if (agentKey === 'coder' || agentKey === 'planner') overrideModel = 'gemini-1.5-pro';
-        else overrideModel = 'gemini-1.5-flash';
-      } else {
-        if (agentKey === 'coder') overrideModel = 'qwen2.5-coder:3b';
-        else overrideModel = 'llama3.2';
-      }
-    }
+    // Map agent to TaskType
+    let agentTask: 'coding' | 'reasoning' | 'chat' = 'chat';
+    if (agentKey === 'coder') agentTask = 'coding';
+    if (agentKey === 'planner' || agentKey === 'researcher') agentTask = 'reasoning';
 
     // Build tool descriptions
     let toolPrompt = '';
@@ -82,8 +73,10 @@ When you are done and have the final answer, respond directly to the user withou
         
         const response = await this.router.generate({
           prompt,
-          model: overrideModel,
+          model: overrideModel || '',
           systemPrompt,
+          taskType: agentTask,
+          agentId: this.state.id,
         });
 
         const content = response.content;

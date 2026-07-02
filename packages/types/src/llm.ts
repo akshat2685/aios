@@ -8,6 +8,10 @@ export interface LLMRequest {
   maxTokens?: number;
   stop?: string[];
   stream?: boolean;
+  taskType?: 'coding' | 'reasoning' | 'chat';
+  agentId?: string;
+  priority?: number;
+  abortSignal?: AbortSignal;
 }
 
 export interface LLMResponse {
@@ -36,7 +40,7 @@ export interface ILLMProvider {
   name: string;
   generate(request: LLMRequest): Promise<LLMResponse>;
   stream(request: LLMRequest): Promise<AsyncGenerator<LLMStreamResponse>>;
-  checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string }>;
+  checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string; latency?: number }>;
   getSupportedModels(): Promise<string[]>;
 }
 
@@ -46,6 +50,8 @@ export interface LLMConfig {
   providers: Record<LLMProviderId, {
     apiKey?: string;
     baseUrl?: string;
+    model?: string;
     timeout?: number;
   }>;
+  agentBudgets?: Record<string, { maxTokens: number }>;
 }

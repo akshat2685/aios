@@ -3,6 +3,9 @@ import { CoreLogger } from './logger';
 import { ConfigManager } from '@aios/config';
 import { IngestionPayload } from '@aios/types';
 import * as crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+
+export type MemoryType = 'preference' | 'note' | 'project' | 'person' | 'document' | 'conversation';
 
 export class MemoryService {
   private client: MemoryClient;
@@ -68,6 +71,62 @@ export class MemoryService {
   async initialize(): Promise<void> {
     await this.init();
   }
+
+  // --- Typed Memory Domain ---
+
+  async saveTypedMemory(type: MemoryType, content: string, metadata: Record<string, any> = {}): Promise<string> {
+    const id = uuidv4();
+    const record: MemoryRecord = {
+      id,
+      type,
+      content,
+      metadata,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    await this.addRecord(record);
+    return id;
+  }
+
+  async searchTyped(type: MemoryType, query: string, limit: number = 10): Promise<MemoryRecord[]> {
+    return this.searchMemory({
+      query,
+      filter: {
+        must: [
+          {
+            key: 'type',
+            match: {
+              value: type,
+            },
+          },
+        ],
+      },
+      limit,
+    });
+  }
+
+  async savePreference(key: string, value: string): Promise<string> {
+    await this.client.deleteByMetadata('key', key);
+    return this.saveTypedMemory('preference', value, { key });
+  }
+
+  async saveNote(topic: string, text: string): Promise<string> {
+    return this.saveTypedMemory('note', text, { topic });
+  }
+
+  async saveProjectContext(projectId: string, text: string): Promise<string> {
+    return this.saveTypedMemory('project', text, { projectId });
+  }
+
+  async savePersonInfo(name: string, info: string): Promise<string> {
+    return this.saveTypedMemory('person', info, { name });
+  }
+
+  async getGlobalPreferences(): Promise<MemoryRecord[]> {
+    return this.searchTyped('preference', 'user preferences', 50);
+  }
+
+  // --- Ingestion ---
 
   async ingest(payload: IngestionPayload): Promise<void> {
     try {

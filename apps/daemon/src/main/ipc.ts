@@ -1,7 +1,9 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, clipboard } from 'electron';
+import { exec } from 'child_process';
 import { AIOSKernel } from '../kernel';
-import { CoreLogger } from '@aios/core';
+import { CoreLogger, TelemetryEngine } from '@aios/core';
 import { ConfigManager } from '@aios/config';
+import { SystemMonitor } from './system';
 
 export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
   // ─── 1. Config management ──────────────────────────────────
@@ -33,6 +35,35 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
+  ipcMain.handle('memory:searchTyped', async (_, { type, query, limit }) => {
+    try {
+      // MemoryType might not be imported in ipc.ts, so we'll just cast or use string
+      return await kernel.memory.searchTyped(type as any, query, limit);
+    } catch (e: any) {
+      logger.error(`memory:searchTyped failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('memory:save', async (_, { type, content, metadata }) => {
+    try {
+      return await kernel.memory.saveTypedMemory(type as any, content, metadata);
+    } catch (e: any) {
+      logger.error(`memory:save failed: ${e.message}`);
+      return null;
+    }
+  });
+
+  ipcMain.handle('memory:delete', async (_, { id }) => {
+    try {
+      await kernel.memory.deleteRecord(id);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`memory:delete failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
   ipcMain.handle('memory:clear', async () => {
     try {
       await kernel.memory.clear();
@@ -52,7 +83,74 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
-  // ─── 3. Agent and Chat operations ─────────────────────────
+  // ─── 3. Graph Service Operations ─────────────────────────
+  ipcMain.handle('graph:getProjects', async () => {
+    try {
+      return await kernel.graph.getProjects();
+    } catch (e: any) {
+      logger.error(`graph:getProjects failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('graph:createProject', async (_, { name, description }) => {
+    try {
+      return await kernel.graph.createProject(name, description);
+    } catch (e: any) {
+      logger.error(`graph:createProject failed: ${e.message}`);
+      return null;
+    }
+  });
+
+  ipcMain.handle('graph:deleteProject', async (_, { id }) => {
+    try {
+      await kernel.graph.deleteProject(id);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`graph:deleteProject failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('graph:getTasks', async (_, { projectId }) => {
+    try {
+      return await kernel.graph.getTasksForProject(projectId);
+    } catch (e: any) {
+      logger.error(`graph:getTasks failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('graph:createTask', async (_, { projectId, title, description, priority }) => {
+    try {
+      return await kernel.graph.createTask(projectId, title, description, priority);
+    } catch (e: any) {
+      logger.error(`graph:createTask failed: ${e.message}`);
+      return null;
+    }
+  });
+
+  ipcMain.handle('graph:updateTaskStatus', async (_, { id, status }) => {
+    try {
+      await kernel.graph.updateTaskStatus(id, status);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`graph:updateTaskStatus failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('graph:deleteTask', async (_, { id }) => {
+    try {
+      await kernel.graph.deleteTask(id);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`graph:deleteTask failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  // ─── 4. Agent and Chat operations ─────────────────────────
   ipcMain.handle('agent:chat', async (_, { message, agentId }) => {
     try {
       logger.info(`Routing chat request to agent ${agentId || 'assistant'}`);
@@ -83,6 +181,33 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
+  ipcMain.handle('llm:states', async () => {
+    try {
+      return kernel.router.getProviderStates();
+    } catch (e: any) {
+      logger.error(`llm:states failed: ${e.message}`);
+      return {};
+    }
+  });
+
+  ipcMain.handle('llm:tracker:stats', async () => {
+    try {
+      return kernel.router.tracker.getStats();
+    } catch (e: any) {
+      logger.error(`llm:tracker:stats failed: ${e.message}`);
+      return {};
+    }
+  });
+
+  ipcMain.handle('llm:cache:stats', async () => {
+    try {
+      return (kernel.router as any).cache?.stats;
+    } catch (e: any) {
+      logger.error(`llm:cache:stats failed: ${e.message}`);
+      return null;
+    }
+  });
+
   ipcMain.handle('llm:models', async () => {
     try {
       const providers = (kernel.router as any).providers;
@@ -99,7 +224,23 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
 
   ipcMain.handle('llm:keys:set', async (_, { provider, key }) => {
     try {
-      await kernel.security.storeSecret(`${provider}_api_key`, key, provider);
+      if (Array.isArray(key)) {
+        // Delete existing pool first (simple approach: delete up to 20 keys)
+        for (let i = 1; i <= 20; i++) {
+          try { await kernel.security.deleteSecret(`${provider}_api_key_${i}`); } catch (e) {}
+        }
+        // Save new pool
+        for (let i = 0; i < key.length; i++) {
+          await kernel.security.storeSecret(`${provider}_api_key_${i + 1}`, key[i], provider);
+        }
+        // Save base key for backward compatibility
+        if (key.length > 0) {
+          await kernel.security.storeSecret(`${provider}_api_key`, key[0], provider);
+        }
+      } else {
+        await kernel.security.storeSecret(`${provider}_api_key`, key, provider);
+        await kernel.security.storeSecret(`${provider}_api_key_1`, key, provider);
+      }
       return { status: 'success' };
     } catch (e: any) {
       logger.error(`llm:keys:set failed for ${provider}: ${e.message}`);
@@ -109,17 +250,20 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
 
   ipcMain.handle('llm:keys:get', async (_, provider) => {
     try {
-      const value = await kernel.security.getSecret(`${provider}_api_key`);
-      return { isSet: !!value };
+      const keys = await kernel.security.getSecretPool(`${provider}_api_key`);
+      return { isSet: keys.length > 0, count: keys.length };
     } catch (e: any) {
       logger.error(`llm:keys:get failed for ${provider}: ${e.message}`);
-      return { isSet: false };
+      return { isSet: false, count: 0 };
     }
   });
 
   ipcMain.handle('llm:keys:delete', async (_, provider) => {
     try {
       await kernel.security.deleteSecret(`${provider}_api_key`);
+      for (let i = 1; i <= 20; i++) {
+        try { await kernel.security.deleteSecret(`${provider}_api_key_${i}`); } catch (e) {}
+      }
       return { status: 'success' };
     } catch (e: any) {
       logger.error(`llm:keys:delete failed for ${provider}: ${e.message}`);
@@ -127,15 +271,17 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
-  ipcMain.handle('llm:stream', async (event, { prompt, model, systemPrompt, conversationId }) => {
+  ipcMain.handle('llm:stream', async (event, { prompt, model, systemPrompt, conversationId, taskType, agentId }) => {
     try {
       logger.info(`Starting LLM stream for conversation ${conversationId}`);
       activeStreams.set(conversationId, true);
 
       const generator = await kernel.router.stream({
         prompt,
-        model: model || 'qwen2.5:8b',
+        model: model || '',
         systemPrompt,
+        taskType: taskType || 'chat',
+        agentId: agentId || 'user',
       });
 
       for await (const chunk of generator) {
@@ -237,6 +383,29 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     app.exit(0);
   });
 
+  ipcMain.handle('app:execute', async (_, command: string) => {
+    return new Promise((resolve) => {
+      exec(command, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`app:execute failed: ${error.message}`);
+          resolve({ status: 'error', error: error.message, stderr });
+        } else {
+          resolve({ status: 'success', stdout });
+        }
+      });
+    });
+  });
+
+  ipcMain.handle('clipboard:read', async () => {
+    try {
+      const text = clipboard.readText();
+      return { status: 'success', text };
+    } catch (e: any) {
+      logger.error(`clipboard:read failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
   // ─── 8. ADK Agent Launcher ─────────────────────────────────
   const adkAgents = [
     { name: 'planner', description: 'Break tasks into structured work items and route them to specialists.', capabilities: ['planning', 'decomposition', 'coordination'], icon: '🧠' },
@@ -291,6 +460,95 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
       if (win.isAlwaysOnTop()) {
         win.hide();
       }
+    }
+  });
+
+  // ─── 9. Workflow / Automation Engine ───────────────────────
+  ipcMain.handle('workflow:list', async () => {
+    try {
+      return kernel.automation.getWorkflows();
+    } catch (e: any) {
+      logger.error(`workflow:list failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('workflow:save', async (_, workflow: any) => {
+    try {
+      await kernel.automation.registerWorkflow(workflow);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`workflow:save failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('workflow:delete', async (_, { id }) => {
+    try {
+      await kernel.automation.deleteWorkflow(id);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`workflow:delete failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('workflow:trigger', async (_, { eventName, payload }) => {
+    try {
+      await kernel.automation.triggerEvent(eventName, payload);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`workflow:trigger failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  // ─── 10. Telemetry & System Monitoring ───────────────────────
+  ipcMain.handle('telemetry:logs', async (_, { limit, type }) => {
+    try {
+      const engine = TelemetryEngine.getInstance();
+      return engine.getRecentEvents(limit, type);
+    } catch (e: any) {
+      logger.error(`telemetry:logs failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('telemetry:clear', async () => {
+    try {
+      const engine = TelemetryEngine.getInstance();
+      engine.clearLogs();
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`telemetry:clear failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('system:metrics', async () => {
+    try {
+      return SystemMonitor.getSystemMetrics();
+    } catch (e: any) {
+      logger.error(`system:metrics failed: ${e.message}`);
+      return null;
+    }
+  });
+
+  ipcMain.handle('system:ollama:models', async () => {
+    try {
+      return await SystemMonitor.getOllamaModels();
+    } catch (e: any) {
+      logger.error(`system:ollama:models failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('system:ollama:ps', async () => {
+    try {
+      return await SystemMonitor.getOllamaPs();
+    } catch (e: any) {
+      logger.error(`system:ollama:ps failed: ${e.message}`);
+      return [];
     }
   });
 }

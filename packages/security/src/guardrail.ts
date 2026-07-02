@@ -4,10 +4,12 @@ import { CoreLogger } from '@aios/core';
 export class GuardRail {
   private logger: CoreLogger;
   private policy: SecurityPolicy;
+  private approvalCallback?: (request: ApprovalRequest) => Promise<boolean>;
 
-  constructor(logger: CoreLogger, policy: SecurityPolicy) {
+  constructor(logger: CoreLogger, policy: SecurityPolicy, approvalCallback?: (request: ApprovalRequest) => Promise<boolean>) {
     this.logger = logger;
     this.policy = policy;
+    this.approvalCallback = approvalCallback;
   }
 
   async requestApproval(request: ApprovalRequest): Promise<boolean> {
@@ -17,8 +19,11 @@ export class GuardRail {
       return true;
     }
 
-    // In a production Electron app, this would trigger an IPC call to the frontend
-    // to show a confirmation dialog.
+    if (this.approvalCallback) {
+      return await this.approvalCallback(request);
+    }
+
+    // Default to deny if no callback provided
     return false; 
   }
 

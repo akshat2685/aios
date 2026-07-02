@@ -24,9 +24,11 @@ export interface WorkflowStep {
 export interface Workflow {
   id: string;
   name: string;
+  description?: string; // Natural language description for Vector DB
   trigger: AutomationTrigger;
   steps: WorkflowStep[];
   isActive: boolean;
+  uiData?: any; // ReactFlow positions and UI state
 }
 
 export interface WorkflowExecution {

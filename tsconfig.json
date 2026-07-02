@@ -32,6 +32,8 @@
     { "path": "./packages/automation" },
     { "path": "./packages/plugins" },
     { "path": "./packages/ui" },
+    { "path": "./packages/graph" },
+    { "path": "./packages/computer" },
     { "path": "./apps/daemon/tsconfig.main.json" },
     { "path": "./apps/daemon/tsconfig.renderer.json" }
   ]

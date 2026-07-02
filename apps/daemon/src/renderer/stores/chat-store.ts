@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getElectronAPI } from '@/lib/electron-api';
+import { useAppStore } from './app-store';
 
 export interface ChatMessage {
   id: string;
@@ -79,6 +80,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   createConversation: (agentId) => {
     const id = generateId();
     const agent = agentId || get().selectedAgent;
+    
+    // Smart Model Routing
+    const cloudMode = useAppStore.getState().cloudMode;
+    let autoModel = get().selectedModel;
+    
+    if (cloudMode === 'local') {
+      if (agent === 'coder') autoModel = 'qwen2.5-coder:3b';
+      else autoModel = 'llama3.2:latest';
+    } else {
+      if (agent === 'coder') autoModel = 'gemini-2.5-pro';
+      else autoModel = 'gemini-2.5-flash';
+    }
+
     const conversation: Conversation = {
       id,
       title: 'New Conversation',
@@ -86,7 +100,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      model: get().selectedModel,
+      model: autoModel,
     };
     set((s) => {
       const updated = { ...s.conversations, [id]: conversation };
@@ -178,7 +192,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Call streaming IPC endpoint
       await api.llm.stream({
         prompt: content,
-        model: state.selectedModel,
+        model: conversation.model || state.selectedModel,
         systemPrompt,
         conversationId: conversationId!,
       });

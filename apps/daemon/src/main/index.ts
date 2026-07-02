@@ -14,6 +14,7 @@ import { createTray } from './tray';
 import { setupAutoLaunch } from './autolaunch';
 import { setupCrashReporter } from '../crash-reporter';
 import { LLMConfig } from '@aios/types';
+import { setupSecurityIPC, requestFrontendApproval } from './security-ipc';
 
 const logger = CoreLogger.getInstance();
 const isDev = process.env.NODE_ENV === 'development';
@@ -49,8 +50,15 @@ async function createApplication() {
   };
 
   try {
+    setupSecurityIPC(logger);
+
     // 3. Boot the AIOS Kernel (The brain)
-    kernel = new AIOSKernel(config, logger);
+    kernel = new AIOSKernel(config, logger, async (request) => {
+      // Find main window to send prompt to
+      const { BrowserWindow } = require('electron');
+      const win = BrowserWindow.getAllWindows()[0];
+      return await requestFrontendApproval(request, () => win?.webContents || null);
+    });
     await kernel.boot();
 
     // 4. Setup Autolaunch
@@ -122,10 +130,10 @@ function createLauncherWindow() {
   });
 
   if (isDev) {
-    launcherWindow.loadURL('http://localhost:3000/#/launcher');
+    launcherWindow.loadURL('http://localhost:3000/#/overlay');
   } else {
     launcherWindow.loadFile(path.join(__dirname, '../../renderer/index.html'), {
-      hash: '/launcher',
+      hash: '/overlay',
     });
   }
 
@@ -141,7 +149,7 @@ app.whenReady().then(async () => {
   createLauncherWindow();
 
   // System-wide hotkey — works from ANY app on Windows
-  globalShortcut.register('Ctrl+Alt+Space', () => {
+  globalShortcut.register('CommandOrControl+Space', () => {
     if (!launcherWindow || launcherWindow.isDestroyed()) {
       createLauncherWindow();
     }

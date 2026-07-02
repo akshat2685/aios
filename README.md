@@ -31,16 +31,23 @@ It belongs entirely to the user and runs local models offline while supporting r
 - **File Tools Suite**: Read, write, list directories, grep patterns, and run shell execution commands.
 - **Boundary Path Security**: Strict `checkPathSafety` assertions ensuring agents can only access files within the active workspace.
 
-### 5. Multi-Source Research Agent (Phase 8)
+### 5. Multi-Source Research Agent (Phase 6)
 - **Search Fallbacks**: Queries **DuckDuckGo Lite** (using form POST fields to bypass scraper blocks) and falls back to **Wikipedia OpenSearch API**.
 - **Article Text Scraper**: Strips nav links, advertisements, and scripts to fetch clean semantic paragraph text blocks.
 - **Synthesis compile**: Full automated search -> scrape -> LLM synthesis pipeline.
 
-### 6. Project Planner Agent (Phase 9)
+### 6. Project Planner Agent (Phase 7)
 - **Task Decomposition**: Breaks high-level goals into task trees with dependency hierarchies.
 - **Task Tracker**: Creates, lists, and updates task statuses (`pending`, `in_progress`, `completed`, `failed`) persisted in `~/.aios/plans.json`.
 
-### 7. Core OS Operations (Phases 10 to 14)
+### 7. Enterprise AI Inference Gateway (Phase 8 - Completed)
+- **Dynamic Provider Scoring**: Weights latency, failure rates, and costs to select the optimal LLM provider at runtime.
+- **Advanced Circuit Breaker**: Auto-trips after consecutive failures and uses half-open state testing for recovery.
+- **Priority Queue & Full Jitter**: Prioritizes user tasks over background memory tasks and implements AWS-style exponential backoff.
+- **LRU/TTL Memory Cache**: In-memory LRU caching with 500MB cap and TTL to reduce redundant LLM calls.
+- **Request Replay & Diagnostics UI**: Full request/response telemetry with a dedicated UI dashboard to visualize cache stats and replay failed requests.
+
+### 8. Core OS Operations (Phases 9 to 14)
 - **Security Approval Dialogs**: Intercepts high-risk operations (e.g. `shell:run`) and requires user confirmation.
 - **Automation triggers**: Hook watch events directly to launch workflow actions.
 - **Cross-Agent delegation**: Exposes `agent:delegate` tool allowing agents to delegate sub-tasks to each other.

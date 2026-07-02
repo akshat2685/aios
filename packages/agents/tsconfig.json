@@ -8,5 +8,15 @@
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"],
+  "references": [
+    { "path": "../config" },
+    { "path": "../core" },
+    { "path": "../devtools" },
+    { "path": "../llm" },
+    { "path": "../research" },
+    { "path": "../types" },
+    { "path": "../utils" },
+    { "path": "../computer" }
+  ]
 }

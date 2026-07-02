@@ -237,6 +237,74 @@ function QuickActionsCard() {
   );
 }
 
+// ─── Provider Network Card (Phase 6) ─────────────────────────
+function ProviderNetworkCard() {
+  const [states, setStates] = useState<Record<string, any>>({});
+  const [stats, setStats] = useState<any>({ totalTokens: 0, byProvider: {}, byAgent: {} });
+  const api = getElectronAPI();
+
+  useEffect(() => {
+    const fetchLLMData = async () => {
+      try {
+        const s = await api.llm.states();
+        if (s) setStates(s);
+        const t = await api.llm.trackerStats();
+        if (t) setStats(t);
+      } catch (e) {
+        // fail silently
+      }
+    };
+    fetchLLMData();
+    const interval = setInterval(fetchLLMData, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <motion.div variants={cardVariants} className="glass-interactive p-5 flex flex-col gap-4 col-span-1 md:col-span-2">
+      <div className="flex items-center gap-2">
+        <Zap size={16} className="text-accent" />
+        <span className="text-sm font-medium">Provider Network & Circuit Breakers</span>
+        <span className="ml-auto text-xs text-muted-foreground">Tokens: {stats.totalTokens?.toLocaleString()}</span>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {Object.keys(states).map((providerId) => {
+          const s = states[providerId];
+          const isTripped = s.rateLimited || !s.healthy;
+          return (
+            <div key={providerId} className="glass-subtle p-3 rounded-xl flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium capitalize">{providerId}</span>
+                <div className={cn('w-2 h-2 rounded-full', isTripped ? 'bg-danger animate-pulse' : 'bg-success')} />
+              </div>
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-[10px] text-muted-foreground">429s: {s.consecutive429Count}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {s.cooldownUntil ? new Date(s.cooldownUntil).toLocaleTimeString() : 'Ready'}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {Object.keys(stats.byAgent || {}).length > 0 && (
+        <div className="mt-2 pt-3 border-t border-glass-border">
+          <div className="text-xs font-medium mb-3 text-muted-foreground">Agent Token Budgets</div>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.entries(stats.byAgent).map(([agentId, data]: [string, any]) => (
+              <div key={agentId} className="flex items-center justify-between">
+                <span className="text-xs capitalize">{agentId}</span>
+                <span className="text-xs font-mono">{data.totalTokens?.toLocaleString()} / 50k</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 // ─── Dashboard Page ─────────────────────────────────────────
 export default function DashboardPage() {
   return (
@@ -262,6 +330,7 @@ export default function DashboardPage() {
         <AgentActivityCard />
         <MemoryStatsCard />
         <QuickActionsCard />
+        <ProviderNetworkCard />
       </div>
     </motion.div>
   );

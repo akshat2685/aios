@@ -76,6 +76,7 @@ export default function SettingsPage() {
 
   // Secure keys state
   const [keysSet, setKeysSet] = useState<Record<string, boolean>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const [inputKeys, setInputKeys] = useState<Record<string, string>>({});
   const [healthStatus, setHealthStatus] = useState<Record<string, { status: string; error?: string }>>({});
   const [testingHealth, setTestingHealth] = useState<Record<string, boolean>>({});
@@ -84,12 +85,12 @@ export default function SettingsPage() {
   const [config, setConfig] = useState({
     llm: {
       defaultProvider: 'ollama',
-      defaultModel: 'qwen2.5:8b',
+      defaultModel: 'llama3.2:latest',
       providers: {
         ollama: { baseUrl: 'http://localhost:11434' },
         openai: { model: 'gpt-4o' },
         anthropic: { model: 'claude-3-5-sonnet-20240620' },
-        gemini: { model: 'gemini-1.5-flash' },
+        gemini: { model: 'gemini-2.5-flash' },
         openrouter: { model: 'meta-llama/llama-3-8b-instruct:free' },
         nvidia: { model: 'meta/llama3-8b-instruct' },
         custom: { baseUrl: 'http://localhost:8000/v1', model: 'default' },
@@ -101,31 +102,41 @@ export default function SettingsPage() {
     advanced: { logLevel: 'info', maxLogFiles: 10, enableProfiling: false },
   });
 
-  // Query API key existence from OS keychain
   const checkKeys = async () => {
     const providers = ['openai', 'anthropic', 'gemini', 'openrouter', 'nvidia', 'custom'];
     const status: Record<string, boolean> = {};
+    const counts: Record<string, number> = {};
     for (const p of providers) {
       try {
         const res = await api.llm.keys.get(p);
         status[p] = res.isSet;
+        counts[p] = res.count;
       } catch {
         status[p] = false;
+        counts[p] = 0;
       }
     }
     setKeysSet(status);
+    setCounts(counts);
   };
 
   // Load config and key status on mount
   useEffect(() => {
     (async () => {
       try {
-        const llm = await api.config.get('llm', config.llm);
-        const memory = await api.config.get('memory', config.memory);
-        const ui = await api.config.get('ui', config.ui);
-        const privacy = await api.config.get('privacy', config.privacy);
-        const advanced = await api.config.get('advanced', config.advanced);
-        setConfig({ llm, memory, ui, privacy, advanced });
+        const llm = await api.config.get('llm');
+        const memory = await api.config.get('memory');
+        const ui = await api.config.get('ui');
+        const privacy = await api.config.get('privacy');
+        const advanced = await api.config.get('advanced');
+        
+        setConfig(prev => ({
+          llm: { ...prev.llm, ...llm, providers: { ...prev.llm.providers, ...(llm?.providers || {}) } },
+          memory: { ...prev.memory, ...memory },
+          ui: { ...prev.ui, ...ui },
+          privacy: { ...prev.privacy, ...privacy },
+          advanced: { ...prev.advanced, ...advanced }
+        }));
       } catch {
         // use defaults
       }
@@ -165,7 +176,9 @@ export default function SettingsPage() {
     const keyStr = inputKeys[provider];
     if (!keyStr) return;
     try {
-      await api.llm.keys.set(provider, keyStr);
+      // Support multiple keys comma separated
+      const keysArray = keyStr.split(',').map(k => k.trim()).filter(Boolean);
+      await api.llm.keys.set(provider, keysArray.length > 1 ? keysArray : keysArray[0]);
       setInputKeys(prev => ({ ...prev, [provider]: '' }));
       await checkKeys();
     } catch (e) {
@@ -310,7 +323,7 @@ export default function SettingsPage() {
                   {[
                     { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o' },
                     { id: 'anthropic', label: 'Anthropic Claude', defaultModel: 'claude-3-5-sonnet-20240620' },
-                    { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash' },
+                    { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-2.5-flash' },
                     { id: 'openrouter', label: 'OpenRouter', defaultModel: 'meta-llama/llama-3-8b-instruct:free' },
                     { id: 'nvidia', label: 'NVIDIA NIM', defaultModel: 'meta/llama3-8b-instruct' },
                   ].map((p) => {
@@ -344,11 +357,11 @@ export default function SettingsPage() {
 
                         {/* API Key management */}
                         <div className="flex items-center justify-between border-t border-glass-border pt-2 gap-3">
-                          <span className="text-xs text-muted-foreground">API Key</span>
+                          <span className="text-xs text-muted-foreground">API Key(s) {isKeySaved && counts[p.id] > 0 ? `(${counts[p.id]} saved)` : ''}</span>
                           <div className="flex items-center gap-2">
                             <input
                               type="password"
-                              placeholder={isKeySaved ? "••••••••••••••••" : "Enter API Key"}
+                              placeholder={isKeySaved ? "Add/Replace (comma-separated)" : "Enter API Key(s)"}
                               value={inputKeys[p.id] || ''}
                               onChange={(e) => setInputKeys(prev => ({ ...prev, [p.id]: e.target.value }))}
                               className="px-3 py-1 bg-glass-strong border border-glass-border rounded-lg text-xs outline-none focus:border-accent text-foreground w-44 no-drag"
@@ -426,11 +439,11 @@ export default function SettingsPage() {
                       <InputField value={config.llm.providers.custom.model} onChange={(v) => updateConfig('llm.providers.custom.model', v)} className="w-56" />
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                      <span>API Key</span>
+                      <span>API Key(s) {keysSet.custom && counts.custom > 0 ? `(${counts.custom} saved)` : ''}</span>
                       <div className="flex items-center gap-2">
                         <input
                           type="password"
-                          placeholder={keysSet.custom ? "••••••••••••••••" : "Enter API Key"}
+                          placeholder={keysSet.custom ? "Add/Replace (comma-separated)" : "Enter API Key(s)"}
                           value={inputKeys.custom || ''}
                           onChange={(e) => setInputKeys(prev => ({ ...prev, custom: e.target.value }))}
                           className="px-3 py-1 bg-glass-strong border border-glass-border rounded-lg text-xs outline-none focus:border-accent text-foreground w-44 no-drag"

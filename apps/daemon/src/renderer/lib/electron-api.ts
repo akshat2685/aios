@@ -17,6 +17,10 @@ export interface ElectronAPI {
     hide: () => Promise<void>;
     show: () => Promise<void>;
     restart: () => Promise<void>;
+    execute: (command: string) => Promise<{ status: string; stdout?: string; error?: string; stderr?: string }>;
+  };
+  clipboard: {
+    read: () => Promise<{ status: string; text?: string; error?: string }>;
   };
   config: {
     get: (key: string, defaultValue?: any) => Promise<any>;
@@ -24,8 +28,20 @@ export interface ElectronAPI {
   };
   memory: {
     search: (options: { query: string; limit?: number }) => Promise<any[]>;
+    searchTyped: (params: { type: string; query: string; limit?: number }) => Promise<any[]>;
+    save: (params: { type: string; content: string; metadata?: any }) => Promise<string | null>;
+    delete: (id: string) => Promise<{ status: string; error?: string }>;
     clear: () => Promise<{ status: string; error?: string }>;
     stats: () => Promise<{ points: number; vectors: number; status: string }>;
+  };
+  graph: {
+    getProjects: () => Promise<any[]>;
+    createProject: (params: { name: string; description?: string }) => Promise<string | null>;
+    deleteProject: (id: string) => Promise<{ status: string; error?: string }>;
+    getTasks: (projectId: string) => Promise<any[]>;
+    createTask: (params: { projectId: string; title: string; description?: string; priority?: string }) => Promise<string | null>;
+    updateTaskStatus: (id: string, status: string) => Promise<{ status: string; error?: string }>;
+    deleteTask: (id: string) => Promise<{ status: string; error?: string }>;
   };
   agent: {
     chat: (params: { message: string; agentId?: string }) => Promise<{ message: string; done: boolean }>;
@@ -40,10 +56,13 @@ export interface ElectronAPI {
     stream: (params: { prompt: string; model?: string; systemPrompt?: string; conversationId: string }) => Promise<void>;
     models: () => Promise<string[]>;
     health: () => Promise<Record<string, { status: string; error?: string }>>;
+    states: () => Promise<Record<string, any>>;
+    trackerStats: () => Promise<any>;
+    getCacheStats: () => Promise<any>;
     stopStream: (conversationId: string) => Promise<void>;
     keys: {
-      set: (provider: string, key: string) => Promise<{ status: string; error?: string }>;
-      get: (provider: string) => Promise<{ isSet: boolean }>;
+      set: (provider: string, key: string | string[]) => Promise<{ status: string; error?: string }>;
+      get: (provider: string) => Promise<{ isSet: boolean; count: number }>;
       delete: (provider: string) => Promise<{ status: string; error?: string }>;
     };
   };
@@ -57,7 +76,25 @@ export interface ElectronAPI {
       ollamaStatus: string;
       memoryStatus: string;
     }>;
+    metrics: () => Promise<any>;
+    ollamaModels: () => Promise<any[]>;
+    ollamaPs: () => Promise<any[]>;
   };
+  security: {
+    resolveApproval: (id: string, approved: boolean) => Promise<void>;
+    onRequestApproval: (callback: (request: any) => void) => () => void;
+  };
+  workflow: {
+    list: () => Promise<any[]>;
+    save: (workflow: any) => Promise<{ status: string; error?: string }>;
+    delete: (id: string) => Promise<{ status: string; error?: string }>;
+    trigger: (eventName: string, payload: any) => Promise<{ status: string; error?: string }>;
+  };
+  telemetry: {
+    logs: (limit?: number, type?: string) => Promise<any[]>;
+    clear: () => Promise<{ status: string; error?: string }>;
+  };
+
   // Event listeners for streaming
   on: (channel: string, callback: (...args: any[]) => void) => void;
   off: (channel: string, callback: (...args: any[]) => void) => void;
@@ -86,6 +123,10 @@ function createMockAPI(): ElectronAPI {
       hide: async () => console.log('Mock: hide'),
       show: async () => console.log('Mock: show'),
       restart: async () => console.log('Mock: restart'),
+      execute: async (command) => ({ status: 'mock', stdout: `Mock executed: ${command}` }),
+    },
+    clipboard: {
+      read: async () => ({ status: 'mock', text: 'Mock clipboard content' }),
     },
     config: {
       get: async (key: string, defaultValue?: any) => defaultValue,
@@ -93,8 +134,20 @@ function createMockAPI(): ElectronAPI {
     },
     memory: {
       search: async () => [],
+      searchTyped: async () => [],
+      save: async () => 'mock-id',
+      delete: async () => ({ status: 'mock' }),
       clear: async () => ({ status: 'mock' }),
       stats: async () => ({ points: 0, vectors: 0, status: 'mock' }),
+    },
+    graph: {
+      getProjects: async () => [],
+      createProject: async () => 'mock-id',
+      deleteProject: async () => ({ status: 'mock' }),
+      getTasks: async () => [],
+      createTask: async () => 'mock-id',
+      updateTaskStatus: async () => ({ status: 'mock' }),
+      deleteTask: async () => ({ status: 'mock' }),
     },
     agent: {
       chat: async ({ message }) => ({
@@ -122,11 +175,14 @@ function createMockAPI(): ElectronAPI {
       stream: async () => {},
       models: async () => ['qwen2.5:8b', 'llama3.1:8b'],
       health: async () => ({ ollama: { status: 'mock' } }),
+      states: async () => ({}),
+      trackerStats: async () => ({}),
+      getCacheStats: async () => ({}),
       stopStream: async () => {},
       keys: {
-        set: async () => ({ status: 'mock' }),
-        get: async () => ({ isSet: false }),
-        delete: async () => ({ status: 'mock' }),
+        set: async (provider: string, key: string | string[]) => ({ status: 'mock' }),
+        get: async (provider: string) => ({ isSet: false, count: 0 }),
+        delete: async (provider: string) => ({ status: 'mock' }),
       },
     },
     research: {
@@ -138,13 +194,25 @@ function createMockAPI(): ElectronAPI {
         metadata: { startTime: Date.now(), endTime: Date.now(), sourcesAnalyzed: 0 },
       }),
     },
+    security: {
+      resolveApproval: async (id: string, approved: boolean) => { console.log('Mock resolveApproval', id, approved); },
+      onRequestApproval: (callback: (request: any) => void) => { return () => {}; },
+    },
+    workflow: {
+      list: async () => [],
+      save: async () => ({ status: 'mock' }),
+      delete: async () => ({ status: 'mock' }),
+      trigger: async () => ({ status: 'mock' }),
+    },
+    telemetry: {
+      logs: async () => [],
+      clear: async () => ({ status: 'mock' }),
+    },
     system: {
-      status: async () => ({
-        version: '0.1.0',
-        uptime: 0,
-        ollamaStatus: 'mock',
-        memoryStatus: 'mock',
-      }),
+      status: async () => ({ version: '1.0', uptime: 0, ollamaStatus: 'mock', memoryStatus: 'mock' }),
+      metrics: async () => ({ cpuUsage: 0, totalMem: 1, freeMem: 1, uptime: 0, platform: 'mock' }),
+      ollamaModels: async () => [],
+      ollamaPs: async () => [],
     },
     on: () => {},
     off: () => {},

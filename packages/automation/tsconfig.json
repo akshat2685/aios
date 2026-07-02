@@ -7,6 +7,14 @@
     "noEmit": false,
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
+  "references": [
+    { "path": "../config" },
+    { "path": "../core" },
+    { "path": "../types" },
+    { "path": "../utils" },
+    { "path": "../llm" },
+    { "path": "../memory" }
+  ],
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

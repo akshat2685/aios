@@ -15,14 +15,37 @@ const validChannels = [
   'update:available',
   'update:downloaded',
   'memory:search',
+  'memory:searchTyped',
+  'memory:save',
+  'memory:delete',
   'memory:clear',
   'memory:stats',
+  'graph:getProjects',
+  'graph:createProject',
+  'graph:deleteProject',
+  'graph:getTasks',
+  'graph:createTask',
+  'graph:updateTaskStatus',
+  'graph:deleteTask',
   'agent:chat',
   'agent:launch',
   'agent-launcher:toggle',
   'research:conduct',
   'adk:list-agents',
   'launcher:hide',
+  'security:resolve-approval',
+  'workflow:list',
+  'workflow:save',
+  'workflow:delete',
+  'workflow:trigger',
+  'telemetry:logs',
+  'telemetry:clear',
+  'system:metrics',
+  'system:ollama:models',
+  'system:ollama:ps',
+  'llm:cache:stats',
+  'llm:tracker:stats',
+  'llm:states',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -36,6 +59,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     hide: () => ipcRenderer.invoke('app:hide'),
     show: () => ipcRenderer.invoke('app:show'),
     restart: () => ipcRenderer.invoke('app:restart'),
+    execute: (command: string) => ipcRenderer.invoke('app:execute', command),
+  },
+  clipboard: {
+    read: () => ipcRenderer.invoke('clipboard:read'),
   },
   dialog: {
     open: (options: Electron.OpenDialogOptions) => ipcRenderer.invoke('dialog:open', options),
@@ -49,8 +76,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   memory: {
     search: (options: any) => ipcRenderer.invoke('memory:search', options),
+    searchTyped: (params: { type: string; query: string; limit?: number }) => ipcRenderer.invoke('memory:searchTyped', params),
+    save: (params: { type: string; content: string; metadata?: any }) => ipcRenderer.invoke('memory:save', params),
+    delete: (id: string) => ipcRenderer.invoke('memory:delete', { id }),
     clear: () => ipcRenderer.invoke('memory:clear'),
     stats: () => ipcRenderer.invoke('memory:stats'),
+  },
+  graph: {
+    getProjects: () => ipcRenderer.invoke('graph:getProjects'),
+    createProject: (params: { name: string; description?: string }) => ipcRenderer.invoke('graph:createProject', params),
+    deleteProject: (id: string) => ipcRenderer.invoke('graph:deleteProject', { id }),
+    getTasks: (projectId: string) => ipcRenderer.invoke('graph:getTasks', { projectId }),
+    createTask: (params: { projectId: string; title: string; description?: string; priority?: string }) => ipcRenderer.invoke('graph:createTask', params),
+    updateTaskStatus: (id: string, status: string) => ipcRenderer.invoke('graph:updateTaskStatus', { id, status }),
+    deleteTask: (id: string) => ipcRenderer.invoke('graph:deleteTask', { id }),
   },
   agent: {
     chat: (message: string, agentId?: string) => ipcRenderer.invoke('agent:chat', { message, agentId }),
@@ -60,17 +99,56 @@ contextBridge.exposeInMainWorld('electronAPI', {
   launcher: {
     hide: () => ipcRenderer.invoke('launcher:hide'),
   },
+  llm: {
+    generate: (params: any) => ipcRenderer.invoke('llm:generate', params),
+    stream: (params: any) => ipcRenderer.invoke('llm:stream', params),
+    models: () => ipcRenderer.invoke('llm:models'),
+    health: () => ipcRenderer.invoke('llm:health'),
+    states: () => ipcRenderer.invoke('llm:states'),
+    getTrackerStats: () => ipcRenderer.invoke('llm:tracker:stats'),
+    getCacheStats: () => ipcRenderer.invoke('llm:cache:stats'),
+    stopStream: (conversationId: string) => ipcRenderer.invoke('llm:stopStream', conversationId),
+    keys: {
+      set: (provider: string, key: string) => ipcRenderer.invoke('llm:keys:set', { provider, key }),
+      get: (provider: string) => ipcRenderer.invoke('llm:keys:get', provider),
+      delete: (provider: string) => ipcRenderer.invoke('llm:keys:delete', provider),
+    },
+  },
+  security: {
+    resolveApproval: (id: string, approved: boolean) => ipcRenderer.invoke('security:resolve-approval', { id, approved }),
+    onRequestApproval: (callback: (request: any) => void) => {
+      ipcRenderer.on('security:request-approval', (_, request) => callback(request));
+      return () => {
+        ipcRenderer.removeAllListeners('security:request-approval');
+      };
+    },
+  },
   research: {
     conduct: (query: string) => ipcRenderer.invoke('research:conduct', { query }),
   },
+  workflow: {
+    list: () => ipcRenderer.invoke('workflow:list'),
+    save: (workflow: any) => ipcRenderer.invoke('workflow:save', workflow),
+    delete: (id: string) => ipcRenderer.invoke('workflow:delete', { id }),
+    trigger: (eventName: string, payload: any) => ipcRenderer.invoke('workflow:trigger', { eventName, payload }),
+  },
+  telemetry: {
+    logs: (limit?: number, type?: string) => ipcRenderer.invoke('telemetry:logs', { limit, type }),
+    clear: () => ipcRenderer.invoke('telemetry:clear'),
+  },
+  system: {
+    metrics: () => ipcRenderer.invoke('system:metrics'),
+    ollamaModels: () => ipcRenderer.invoke('system:ollama:models'),
+    ollamaPs: () => ipcRenderer.invoke('system:ollama:ps'),
+  },
   on: (channel: string, callback: (...args: any[]) => void) => {
-    if (!validChannels.includes(channel)) return;
+    if (!validChannels.includes(channel) && !channel.startsWith('llm:')) return;
     const listener = (_event: IpcRendererEvent, ...args: any[]) => callback(...args);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
   once: (channel: string, callback: (...args: any[]) => void) => {
-    if (!validChannels.includes(channel)) return;
+    if (!validChannels.includes(channel) && !channel.startsWith('llm:')) return;
     ipcRenderer.once(channel, (_event: IpcRendererEvent, ...args: any[]) => callback(...args));
   },
 });
@@ -94,6 +172,10 @@ declare global {
         hide: () => Promise<void>;
         show: () => Promise<void>;
         restart: () => Promise<void>;
+        execute: (command: string) => Promise<{ status: string; stdout?: string; error?: string; stderr?: string }>;
+      };
+      clipboard: {
+        read: () => Promise<{ status: string; text?: string; error?: string }>;
       };
       dialog: {
         open: (options: Electron.OpenDialogOptions) => Promise<Electron.OpenDialogReturnValue>;
@@ -107,8 +189,20 @@ declare global {
       };
       memory: {
         search: (options: any) => Promise<any[]>;
-        clear: () => Promise<{ status: string }>;
+        searchTyped: (params: { type: string; query: string; limit?: number }) => Promise<any[]>;
+        save: (params: { type: string; content: string; metadata?: any }) => Promise<string | null>;
+        delete: (id: string) => Promise<{ status: string; error?: string }>;
+        clear: () => Promise<{ status: string; error?: string }>;
         stats: () => Promise<{ points: number; vectors: number; status: string }>;
+      };
+      graph: {
+        getProjects: () => Promise<any[]>;
+        createProject: (params: { name: string; description?: string }) => Promise<string | null>;
+        deleteProject: (id: string) => Promise<{ status: string; error?: string }>;
+        getTasks: (projectId: string) => Promise<any[]>;
+        createTask: (params: { projectId: string; title: string; description?: string; priority?: string }) => Promise<string | null>;
+        updateTaskStatus: (id: string, status: string) => Promise<{ status: string; error?: string }>;
+        deleteTask: (id: string) => Promise<{ status: string; error?: string }>;
       };
       agent: {
         chat: (message: string, agentId?: string) => Promise<any>;

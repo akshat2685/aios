@@ -19,11 +19,23 @@ export class NvidiaProvider implements ILLMProvider {
     });
   }
 
+  private keyPool: string[] = [];
+  private currentKeyIndex: number = 0;
+  private lastPoolFetch: number = 0;
+
   private async getApiKey(): Promise<string> {
-    const apiKey = await this.security.getSecret('nvidia_api_key');
-    if (!apiKey) {
+    const now = Date.now();
+    if (this.keyPool.length === 0 || now - this.lastPoolFetch > 300000) {
+      this.keyPool = await this.security.getSecretPool('nvidia_api_key');
+      this.lastPoolFetch = now;
+    }
+
+    if (this.keyPool.length === 0) {
       throw new Error('NVIDIA API Key is not set in security configuration');
     }
+
+    const apiKey = this.keyPool[this.currentKeyIndex];
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % this.keyPool.length;
     return apiKey;
   }
 
@@ -48,6 +60,7 @@ export class NvidiaProvider implements ILLMProvider {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
+        signal: request.abortSignal,
       });
 
       return {
@@ -91,6 +104,7 @@ export class NvidiaProvider implements ILLMProvider {
             'Content-Type': 'application/json',
           },
           responseType: 'stream',
+          signal: request.abortSignal,
         });
 
         let buffer = '';
@@ -143,21 +157,17 @@ export class NvidiaProvider implements ILLMProvider {
     return run();
   }
 
-  async checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string }> {
+  async checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string; latency?: number }> {
+    const start = Date.now();
     try {
       const apiKey = await this.getApiKey();
-      await axios.post('https://integrate.api.nvidia.com/v1/chat/completions', {
-        model: 'meta/llama3-8b-instruct',
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 1,
-      }, {
+      await axios.get('https://integrate.api.nvidia.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
         },
         timeout: 5000,
       });
-      return { status: 'healthy' };
+      return { status: 'healthy', latency: Date.now() - start };
     } catch (error: any) {
       const msg = error.response?.data?.error?.message || error.message;
       return { status: 'unhealthy', error: msg };

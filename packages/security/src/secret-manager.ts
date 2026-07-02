@@ -37,6 +37,26 @@ export class SecretManager {
     }
   }
 
+  async getSecretPool(baseKey: string): Promise<string[]> {
+    const keys: string[] = [];
+    let i = 1;
+    while (true) {
+      const key = await this.getSecret(`${baseKey}_${i}`);
+      if (key) {
+        keys.push(key);
+        i++;
+      } else {
+        break;
+      }
+    }
+    // Also check the un-numbered base key for backward compatibility
+    if (keys.length === 0) {
+      const base = await this.getSecret(baseKey);
+      if (base) keys.push(base);
+    }
+    return keys;
+  }
+
   async deleteSecret(key: string): Promise<void> {
     try {
       await keytar.deletePassword(this.SERVICE_NAME, key);

@@ -19,11 +19,23 @@ export class AnthropicProvider implements ILLMProvider {
     });
   }
 
+  private keyPool: string[] = [];
+  private currentKeyIndex: number = 0;
+  private lastPoolFetch: number = 0;
+
   private async getApiKey(): Promise<string> {
-    const apiKey = await this.security.getSecret('anthropic_api_key');
-    if (!apiKey) {
+    const now = Date.now();
+    if (this.keyPool.length === 0 || now - this.lastPoolFetch > 300000) {
+      this.keyPool = await this.security.getSecretPool('anthropic_api_key');
+      this.lastPoolFetch = now;
+    }
+
+    if (this.keyPool.length === 0) {
       throw new Error('Anthropic API Key is not set in security configuration');
     }
+
+    const apiKey = this.keyPool[this.currentKeyIndex];
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % this.keyPool.length;
     return apiKey;
   }
 
@@ -44,6 +56,7 @@ export class AnthropicProvider implements ILLMProvider {
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
+        signal: request.abortSignal,
       });
 
       return {
@@ -83,6 +96,7 @@ export class AnthropicProvider implements ILLMProvider {
             'content-type': 'application/json',
           },
           responseType: 'stream',
+          signal: request.abortSignal,
         });
 
         let buffer = '';
@@ -135,7 +149,8 @@ export class AnthropicProvider implements ILLMProvider {
     return run();
   }
 
-  async checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string }> {
+  async checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string; latency?: number }> {
+    const start = Date.now();
     try {
       const apiKey = await this.getApiKey();
       await axios.post('https://api.anthropic.com/v1/messages', {
@@ -150,7 +165,7 @@ export class AnthropicProvider implements ILLMProvider {
         },
         timeout: 5000,
       });
-      return { status: 'healthy' };
+      return { status: 'healthy', latency: Date.now() - start };
     } catch (error: any) {
       const msg = error.response?.data?.error?.message || error.message;
       return { status: 'unhealthy', error: msg };

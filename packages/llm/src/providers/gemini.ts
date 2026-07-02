@@ -19,18 +19,32 @@ export class GeminiProvider implements ILLMProvider {
     });
   }
 
+  private keyPool: string[] = [];
+  private currentKeyIndex: number = 0;
+  private lastPoolFetch: number = 0;
+
   private async getApiKey(): Promise<string> {
-    const apiKey = await this.security.getSecret('gemini_api_key');
-    if (!apiKey) {
+    const now = Date.now();
+    // Refresh pool every 5 minutes in case user adds keys in UI
+    if (this.keyPool.length === 0 || now - this.lastPoolFetch > 300000) {
+      this.keyPool = await this.security.getSecretPool('gemini_api_key');
+      this.lastPoolFetch = now;
+    }
+
+    if (this.keyPool.length === 0) {
       throw new Error('Gemini API Key is not set in security configuration');
     }
+
+    // Round robin rotation
+    const apiKey = this.keyPool[this.currentKeyIndex];
+    this.currentKeyIndex = (this.currentKeyIndex + 1) % this.keyPool.length;
     return apiKey;
   }
 
   async generate(request: LLMRequest): Promise<LLMResponse> {
     try {
       const apiKey = await this.getApiKey();
-      const model = request.model || 'gemini-1.5-flash';
+      const model = request.model || 'gemini-2.5-flash';
       
       const contents = [{
         parts: [{ text: request.prompt }]
@@ -51,7 +65,9 @@ export class GeminiProvider implements ILLMProvider {
         };
       }
 
-      const response = await this.client.post(`/models/${model}:generateContent?key=${apiKey}`, body);
+      const response = await this.client.post(`/models/${model}:generateContent?key=${apiKey}`, body, {
+        signal: request.abortSignal,
+      });
       const candidates = response.data.candidates || [];
       const text = candidates[0]?.content?.parts?.[0]?.text || '';
       const usage = response.data.usageMetadata || {};
@@ -78,7 +94,7 @@ export class GeminiProvider implements ILLMProvider {
     async function* run() {
       try {
         const apiKey = await self.getApiKey();
-        const model = request.model || 'gemini-1.5-flash';
+        const model = request.model || 'gemini-2.5-flash';
 
         const contents = [{
           parts: [{ text: request.prompt }]
@@ -101,6 +117,7 @@ export class GeminiProvider implements ILLMProvider {
 
         const response = await self.client.post(`/models/${model}:streamGenerateContent?key=${apiKey}`, body, {
           responseType: 'stream',
+          signal: request.abortSignal,
         });
 
         let buffer = '';
@@ -164,14 +181,12 @@ export class GeminiProvider implements ILLMProvider {
     return run();
   }
 
-  async checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string }> {
+  async checkHealth(): Promise<{ status: 'healthy' | 'unhealthy'; error?: string; latency?: number }> {
+    const start = Date.now();
     try {
       const apiKey = await this.getApiKey();
-      await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        contents: [{ parts: [{ text: 'ping' }] }],
-        generationConfig: { maxOutputTokens: 1 }
-      }, { timeout: 5000 });
-      return { status: 'healthy' };
+      await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, { timeout: 5000 });
+      return { status: 'healthy', latency: Date.now() - start };
     } catch (error: any) {
       const msg = error.response?.data?.error?.message || error.message;
       return { status: 'unhealthy', error: msg };
@@ -182,7 +197,9 @@ export class GeminiProvider implements ILLMProvider {
     return [
       'gemini-1.5-flash',
       'gemini-1.5-pro',
-      'gemini-1.0-pro',
+      'gemini-2.0-flash',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
     ];
   }
 }

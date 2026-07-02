@@ -2,8 +2,8 @@ import { BaseAgent } from './base-agent';
 import { LLMRouter } from '@aios/llm';
 import { CoreLogger } from '@aios/core';
 import { getCodingTools } from './tools/coding-tools';
-
 import { getResearchTools } from './tools/research-tools';
+import { getComputerTools } from './tools/computer-tools';
 
 export class AssistantAgent extends BaseAgent {
   constructor(router: LLMRouter, logger: CoreLogger) {
@@ -29,6 +29,12 @@ export class CoderAgent extends BaseAgent {
     // Register coding tools
     const tools = getCodingTools(workspacePath, logger, requestApproval);
     for (const tool of tools) {
+      this.registerTool(tool);
+    }
+    
+    // Register computer tools for system interaction
+    const computerTools = getComputerTools(logger, requestApproval);
+    for (const tool of computerTools) {
       this.registerTool(tool);
     }
   }

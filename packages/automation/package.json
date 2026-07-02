@@ -15,6 +15,7 @@
     "@aios/core": "*",
     "@aios/utils": "*",
     "@aios/llm": "*",
+    "@aios/memory": "*",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"
   },

@@ -11,3 +11,4 @@ export { isMobile } from '@aios/utils';
 export { isDev } from '@aios/utils';
 export { isProduction } from '@aios/utils';
 export { MemoryService } from './memory-service';
+export * from './telemetry';
