@@ -5,3 +5,5 @@ export * from './devtools';
 export * from './llm';
 export * from './research';
 export * from './security';
+export * from './planner';
+export * from './plugin';

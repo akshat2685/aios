@@ -14,7 +14,10 @@ import { LLMCache } from './cache';
 import { TelemetryEngine } from '@aios/core';
 
 import { RequestManager } from './queue';
-
+import { ModelRegistry } from './registry';
+import { TaskClassifier } from './classifier';
+import { IntelligentScorer } from './scorer';
+import { TaskType, RoutingProfile } from '@aios/types';
 export interface ProviderState {
   healthy: boolean;
   rateLimited: boolean;
@@ -37,6 +40,7 @@ export class LLMRouter {
   private requestManagers: Map<string, RequestManager> = new Map();
   public cache: LLMCache;
   private telemetry: TelemetryEngine;
+  public registry: ModelRegistry;
 
   private providerStates: Map<string, ProviderState> = new Map();
   private readonly CIRCUIT_BREAKER_TRIP_LIMIT = 3;
@@ -50,6 +54,7 @@ export class LLMRouter {
     this.telemetry = TelemetryEngine.getInstance();
     this.tracker = new LLMTracker();
     this.cache = new LLMCache();
+    this.registry = new ModelRegistry(logger);
 
     // Register all built providers
     this.registerProvider(new OllamaProvider({ baseUrl: config.providers.ollama?.baseUrl }, logger));
@@ -102,7 +107,11 @@ export class LLMRouter {
           quotaExhausted: false,
           cooldownUntil: null,
           latency: 0,
-          consecutive429Count: 0
+          consecutive429Count: 0,
+          consecutiveFailures: 0,
+          successCount: 0,
+          errorCount: 0,
+          circuitState: 'closed'
         };
       }
     }
@@ -238,71 +247,50 @@ export class LLMRouter {
     return false;
   }
 
-  private getNextAvailableProvider(request: LLMRequest, excludeProviders: string[] = []): { providerId: LLMProviderId, model: string } | null {
-    let chain: Array<{ id: string, model: string }> = [];
-    
-    // Task-specific fallbacks
-    if (request.taskType === 'coding') {
-      chain = [
-        { id: 'ollama', model: 'qwen2.5-coder:3b' },
-        { id: 'anthropic', model: 'claude-3-5-sonnet-20240620' },
-        { id: 'gemini', model: 'gemini-1.5-pro' }
-      ];
-    } else if (request.taskType === 'reasoning') {
-      chain = [
-        { id: 'gemini', model: 'gemini-1.5-pro' },
-        { id: 'openai', model: 'o1-preview' },
-        { id: 'anthropic', model: 'claude-3-5-sonnet-20240620' }
-      ];
-    } else if (request.taskType === 'chat') {
-      chain = [
-        { id: 'gemini', model: 'gemini-1.5-flash' },
-        { id: 'ollama', model: 'llama3.2:latest' }
-      ];
-    } else {
-      // Default generic chain
-      chain = [
-        { id: 'gemini', model: this.config.providers?.gemini?.model || 'gemini-2.5-pro' },
-        { id: 'openai', model: this.config.providers?.openai?.model || 'gpt-4o' },
-        { id: 'anthropic', model: this.config.providers?.anthropic?.model || 'claude-3-5-sonnet-20240620' },
-        { id: 'openrouter', model: this.config.providers?.openrouter?.model || 'meta-llama/llama-3-8b-instruct:free' },
-        { id: 'nvidia', model: this.config.providers?.nvidia?.model || 'meta/llama3-8b-instruct' },
-        { id: 'ollama', model: this.config.defaultModel || 'llama3.2:latest' }
-      ];
+  private getBestModel(request: LLMRequest, excludeProviders: string[] = []): { providerId: LLMProviderId, model: string } | null {
+    // 1. Classify Task
+    let taskType: TaskType = request.taskType as TaskType;
+    if (!taskType) {
+      const { type } = TaskClassifier.classify(request.prompt);
+      taskType = type;
     }
 
-    // Dynamic Provider Scoring: Latency + FailureRate (lower score is better)
-    let bestStep: { id: string, model: string } | null = null;
-    let bestScore = Infinity;
+    const profile: RoutingProfile = this.config.routingProfile || 'BALANCED';
 
-    for (const step of chain) {
-      if (this.providers.has(step.id as LLMProviderId) && !this.isProviderCooling(step.id) && !excludeProviders.includes(step.id)) {
-        const state = this.getState(step.id);
-        
-        // Compute Score
-        const totalReqs = state.successCount + state.errorCount;
-        const failureRate = totalReqs > 0 ? (state.errorCount / totalReqs) : 0;
-        // Cost heuristic: openrouter=10, openai=20, anthropic=20, nvidia=10, ollama=0, gemini=5 (flash=2)
-        let costScore = 10;
-        if (step.id === 'ollama') costScore = 0;
-        if (step.id === 'gemini') costScore = step.model.includes('flash') ? 2 : 5;
-        if (step.id === 'openai') costScore = 20;
-        if (step.id === 'anthropic') costScore = 20;
-        
-        // score = latency (ms) + failureRate * 5000 + costScore * 10
-        const score = state.latency + (failureRate * 5000) + (costScore * 10);
-        
-        if (score < bestScore) {
-          bestScore = score;
-          bestStep = step;
-        }
+    // 2. Fetch Capabilities
+    const allModels = this.registry.getAllCapabilities();
+    let bestScore = -Infinity;
+    let bestModel: { providerId: LLMProviderId, model: string } | null = null;
+
+    const isLocal = this.config.defaultProvider === 'ollama';
+
+    for (const cap of allModels) {
+      if (!this.providers.has(cap.providerId as LLMProviderId)) continue;
+      if (excludeProviders.includes(cap.providerId)) continue;
+      if (this.isProviderCooling(cap.providerId)) continue;
+
+      if (isLocal && cap.providerId !== 'ollama') continue;
+      if (!isLocal && cap.providerId === 'ollama') continue;
+
+      const score = IntelligentScorer.score(cap, taskType, profile);
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestModel = { providerId: cap.providerId as LLMProviderId, model: cap.modelId };
       }
     }
-    
-    if (bestStep) {
-      return { providerId: bestStep.id as LLMProviderId, model: bestStep.model };
+
+    if (bestModel) {
+      this.logger.info(`Routing decision: Selected ${bestModel.model} from ${bestModel.providerId} with score ${bestScore.toFixed(3)} for task ${taskType}`);
+    } else {
+      this.logger.warn(`Routing decision: No eligible models found for task ${taskType}`);
     }
-    return null;
+
+    return bestModel;
+  }
+
+  private getNextAvailableProvider(request: LLMRequest, excludeProviders: string[] = []): { providerId: LLMProviderId, model: string } | null {
+    return this.getBestModel(request, excludeProviders);
   }
 
   private checkAgentBudget(agentId?: string): void {
@@ -445,43 +433,15 @@ export class LLMRouter {
   }
 
   private resolveTask(request: LLMRequest): { providerId: LLMProviderId, model: string } {
-    if (request.taskType) {
-      if (this.config.defaultProvider === 'ollama') {
-        if (request.taskType === 'coding') {
-          return { providerId: 'ollama', model: 'qwen2.5-coder:3b' };
-        }
-        return { providerId: 'ollama', model: 'llama3.2:latest' };
-      } else {
-        if (request.taskType === 'coding') {
-          return { providerId: 'anthropic', model: 'claude-3-5-sonnet-20240620' };
-        }
-        if (request.taskType === 'reasoning') {
-          return { providerId: 'openai', model: 'o1-preview' };
-        }
-        return { providerId: 'gemini', model: 'gemini-1.5-pro' };
-      }
-    }
-
-    // Legacy fallback using hardcoded model strings
-    const model = (request.model || '').toLowerCase();
+    // Advanced mode bypass (if user explicitly provided a model and we are not forcing auto)
+    // Wait, let's see. If the UI passes a model, how do we know if it's advanced mode?
+    // We can assume if request.model is set and we have a valid mapping, we MIGHT use it.
+    // But the intelligent router should override request.model unless we have a specific advanced flag.
+    // We will just let getBestModel decide.
+    const best = this.getBestModel(request);
+    if (best) return best;
     
-    if (model.includes('gpt-') || model.includes('text-davinci')) {
-      return { providerId: 'openai', model: request.model };
-    }
-    if (model.includes('claude-')) {
-      return { providerId: 'anthropic', model: request.model };
-    }
-    if (model.includes('gemini-')) {
-      return { providerId: 'gemini', model: request.model };
-    }
-    if (model.includes('meta-llama') || model.includes('mistralai/') || model.includes(':free')) {
-      return { providerId: 'openrouter', model: request.model };
-    }
-    if (model.includes('meta/llama') || model.includes('nvidia/')) {
-      return { providerId: 'nvidia', model: request.model };
-    }
-    
-    return { providerId: this.config.defaultProvider || 'ollama', model: request.model };
+    return { providerId: this.config.defaultProvider || 'ollama', model: request.model || 'llama3.2:latest' };
   }
 
   private async handleFallback(request: LLMRequest, failedProviders: string[], error: any): Promise<LLMResponse> {

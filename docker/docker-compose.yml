@@ -1,7 +1,7 @@
 version: '3'
 services:
   qdrant:
-    image: qdrant/qdrant:v1.25
+    image: qdrant/qdrant:latest
     container_name: qdrant
     restart: unless-stopped
     ports:

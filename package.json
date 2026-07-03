@@ -8,7 +8,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run build:all\" \"wait-on http://localhost:3000 && npm run dev:frontend\"",
+    "dev": "concurrently \"npm run build:packages\" \"cd apps/daemon && npm run dev\"",
     "build:daemon": "cd apps/daemon && npm run build",
     "dev:renderer": "cd apps/daemon && npm run dev:renderer",
     "build": "npm run build:packages && npm run build:apps",

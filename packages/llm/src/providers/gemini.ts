@@ -44,7 +44,7 @@ export class GeminiProvider implements ILLMProvider {
   async generate(request: LLMRequest): Promise<LLMResponse> {
     try {
       const apiKey = await this.getApiKey();
-      const model = request.model || 'gemini-2.5-flash';
+      const model = request.model || 'gemini-1.5-flash';
       
       const contents = [{
         parts: [{ text: request.prompt }]
@@ -94,7 +94,7 @@ export class GeminiProvider implements ILLMProvider {
     async function* run() {
       try {
         const apiKey = await self.getApiKey();
-        const model = request.model || 'gemini-2.5-flash';
+        const model = request.model || 'gemini-1.5-flash';
 
         const contents = [{
           parts: [{ text: request.prompt }]
@@ -198,8 +198,6 @@ export class GeminiProvider implements ILLMProvider {
       'gemini-1.5-flash',
       'gemini-1.5-pro',
       'gemini-2.0-flash',
-      'gemini-2.5-flash',
-      'gemini-2.5-pro',
     ];
   }
 }

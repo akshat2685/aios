@@ -46,6 +46,12 @@ const validChannels = [
   'llm:cache:stats',
   'llm:tracker:stats',
   'llm:states',
+  'security:get-rules',
+  'security:delete-rule',
+  'security:get-audit-logs',
+  'plugins:list',
+  'plugins:uninstall',
+  'automation:triggers',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -102,7 +108,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   llm: {
     generate: (params: any) => ipcRenderer.invoke('llm:generate', params),
     stream: (params: any) => ipcRenderer.invoke('llm:stream', params),
-    models: () => ipcRenderer.invoke('llm:models'),
+    models: (providerId: string) => ipcRenderer.invoke('llm:models', providerId),
     health: () => ipcRenderer.invoke('llm:health'),
     states: () => ipcRenderer.invoke('llm:states'),
     getTrackerStats: () => ipcRenderer.invoke('llm:tracker:stats'),
@@ -115,13 +121,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
   security: {
-    resolveApproval: (id: string, approved: boolean) => ipcRenderer.invoke('security:resolve-approval', { id, approved }),
+    resolveApproval: (id: string, approved: boolean | string) => ipcRenderer.invoke('security:resolve-approval', { id, approved }),
     onRequestApproval: (callback: (request: any) => void) => {
       ipcRenderer.on('security:request-approval', (_, request) => callback(request));
       return () => {
         ipcRenderer.removeAllListeners('security:request-approval');
       };
     },
+    getRules: () => ipcRenderer.invoke('security:get-rules'),
+    deleteRule: (id: string, type: 'persistent' | 'session') => ipcRenderer.invoke('security:delete-rule', { id, type }),
+    getAuditLogs: (limit?: number) => ipcRenderer.invoke('security:get-audit-logs', { limit }),
+  },
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    uninstall: (id: string) => ipcRenderer.invoke('plugins:uninstall', { id }),
   },
   research: {
     conduct: (query: string) => ipcRenderer.invoke('research:conduct', { query }),
@@ -131,6 +144,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (workflow: any) => ipcRenderer.invoke('workflow:save', workflow),
     delete: (id: string) => ipcRenderer.invoke('workflow:delete', { id }),
     trigger: (eventName: string, payload: any) => ipcRenderer.invoke('workflow:trigger', { eventName, payload }),
+    triggers: () => ipcRenderer.invoke('automation:triggers'),
   },
   telemetry: {
     logs: (limit?: number, type?: string) => ipcRenderer.invoke('telemetry:logs', { limit, type }),
@@ -214,6 +228,10 @@ declare global {
       };
       research: {
         conduct: (query: string) => Promise<any>;
+      };
+      plugins: {
+        list: () => Promise<any[]>;
+        uninstall: (id: string) => Promise<{ status: string; error?: string }>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;

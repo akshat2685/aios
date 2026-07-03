@@ -17,13 +17,13 @@ export const ConfigSchema = z.object({
   llm: z.object({
     defaultProvider: z.enum(['ollama', 'lmstudio', 'openai', 'anthropic', 'local']).default('ollama'),
     ollama: z.object({
-      host: z.string().default('http://localhost:11434'),
+      host: z.string().default('http://127.0.0.1:11434'),
       model: z.string().default('llama3.2'),
       temperature: z.number().default(0.7),
       maxTokens: z.number().default(4096),
     }),
     lmstudio: z.object({
-      host: z.string().default('http://localhost:1234'),
+      host: z.string().default('http://127.0.0.1:1234'),
       model: z.string().default(''),
     }),
     openai: z.object({
@@ -110,13 +110,13 @@ const DEFAULT_CONFIG: Config = {
   llm: {
     defaultProvider: 'ollama',
     ollama: {
-      host: 'http://localhost:11434',
+      host: 'http://127.0.0.1:11434',
       model: 'llama3.2',
       temperature: 0.7,
       maxTokens: 4096,
     },
     lmstudio: {
-      host: 'http://localhost:1234',
+      host: 'http://127.0.0.1:1234',
       model: '',
     },
     openai: {

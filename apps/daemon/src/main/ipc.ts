@@ -208,16 +208,16 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
-  ipcMain.handle('llm:models', async () => {
+  ipcMain.handle('llm:models', async (_, providerId: string) => {
     try {
       const providers = (kernel.router as any).providers;
-      const ollamaProvider = providers?.get('ollama');
-      if (ollamaProvider && typeof ollamaProvider.getSupportedModels === 'function') {
-        return await ollamaProvider.getSupportedModels();
+      const targetProvider = providers?.get(providerId || 'ollama');
+      if (targetProvider && typeof targetProvider.getSupportedModels === 'function') {
+        return await targetProvider.getSupportedModels();
       }
       return [];
     } catch (e: any) {
-      logger.error(`llm:models failed: ${e.message}`);
+      logger.error(`llm:models failed for ${providerId}: ${e.message}`);
       return [];
     }
   });
@@ -550,5 +550,70 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
       logger.error(`system:ollama:ps failed: ${e.message}`);
       return [];
     }
+  });
+
+  // ─── 11. Security GuardRails ───────────────────────────────
+  ipcMain.handle('security:get-rules', async () => {
+    try {
+      return {
+        persistent: kernel.guardRail.getPersistentRules(),
+        session: kernel.guardRail.getSessionRules()
+      };
+    } catch (e: any) {
+      logger.error(`security:get-rules failed: ${e.message}`);
+      return { persistent: [], session: [] };
+    }
+  });
+
+  ipcMain.handle('security:delete-rule', async (_, { id, type }) => {
+    try {
+      if (type === 'session') {
+        return await kernel.guardRail.deleteSessionRule(id);
+      } else {
+        return await kernel.guardRail.deletePersistentRule(id);
+      }
+    } catch (e: any) {
+      logger.error(`security:delete-rule failed: ${e.message}`);
+      return false;
+    }
+  });
+
+  ipcMain.handle('security:get-audit-logs', async (_, { limit }) => {
+    try {
+      return await kernel.guardRail.getAuditLogs(limit || 100);
+    } catch (e: any) {
+      logger.error(`security:get-audit-logs failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  // ─── 12. Plugin Management ─────────────────────────────────
+  ipcMain.handle('plugins:list', async () => {
+    try {
+      const plugins = kernel.plugins.getPlugins();
+      return plugins.map(p => ({
+        manifest: p.manifest,
+        status: 'running', // Eventually implement enabled/disabled state
+      }));
+    } catch (e: any) {
+      logger.error(`plugins:list failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('plugins:uninstall', async (_, { id }) => {
+    try {
+      await kernel.plugins.unloadPlugin(id);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`plugins:uninstall failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  // Automation extensions
+  ipcMain.handle('automation:triggers', async () => {
+    // Expose active triggers if added to automation engine
+    return []; // Placeholder until trigger list is fully exposed
   });
 }

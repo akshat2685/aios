@@ -7,8 +7,9 @@ import { AgentMessage, AgentResponse } from '@aios/types';
 import { getDelegationTool } from './tools/delegation-tool';
 import { SkillManager } from './skill-manager';
 import { getSkillReadTool } from './tools/skill-tools';
-
+import { loadPlans, savePlans } from './tools/planner-tools';
 import { MemoryService } from '@aios/core';
+import { GuardRail, askApproval } from '@aios/security';
 
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent> = new Map();
@@ -27,20 +28,72 @@ export class AgentOrchestrator {
     this.memory = memory;
     this.skillManager = new SkillManager(logger, workspacePath);
     
+    // Setup Security Guardrail
+    const policy = {
+      allowDangerousActions: false,
+      requireApprovalFor: ['shell' as any, 'computer_run_shell' as any, 'shell:run' as any, 'file_write' as any],
+      encryptionEnabled: false,
+      airGappedMode: false
+    };
+    
+    const guardRail = new GuardRail(logger, policy, askApproval);
+    
+    const coderApproval = async (action: string, target: string) => {
+      return await guardRail.requestApproval({
+        id: Math.random().toString(36).substring(7),
+        action,
+        target,
+        params: {},
+        agentId: 'coder',
+        timestamp: Date.now(),
+        cwd: workspacePath
+      });
+    };
+
     // Initialize core agents
     this.registerAgent('assistant', new AssistantAgent(router, logger));
-    this.registerAgent('coder', new CoderAgent(router, logger, workspacePath, requestApproval));
+    this.registerAgent('coder', new CoderAgent(router, logger, workspacePath, coderApproval));
     this.registerAgent('researcher', new ResearchAgent(router, logger));
     this.registerAgent('planner', new PlannerAgent(router, logger));
 
     // Initialize cross-agent delegation tool
-    const delegationTool = getDelegationTool(async (agentId, task) => {
-      this.logger.info(`Orchestrator: Agent delegated sub-task to "${agentId}": "${task}"`);
+    const delegationTool = getDelegationTool(async (agentId, task, planId, taskId) => {
+      this.logger.info(`Orchestrator: Agent delegated sub-task to "${agentId}": "${task}" (Plan: ${planId}, Task: ${taskId})`);
+      
+      let taskRef: any = null;
+      let planRef: any = null;
+      let plans: any[] = [];
+      
+      if (planId && taskId) {
+        plans = await loadPlans();
+        planRef = plans.find(p => p.id === planId);
+        if (planRef) {
+          taskRef = planRef.tasks.find((t: any) => t.id === taskId);
+          if (taskRef) {
+            taskRef.status = 'in_progress';
+            taskRef.assignedAgent = agentId;
+            await savePlans(plans);
+          }
+        }
+      }
+
+      // Context override injection
+      const contextPrefix = (planId && taskId) 
+        ? `[DELEGATION CONTEXT]\nYou have been delegated a sub-task for Plan ${planId} (Task ID: ${taskId}).\n`
+        : '';
+
       const response = await this.routeRequest(agentId, {
         role: 'user',
-        content: task,
+        content: contextPrefix + task,
         timestamp: Date.now()
       });
+
+      if (taskRef) {
+        taskRef.status = 'completed';
+        taskRef.result = response.message.substring(0, 500); // Store summary of result
+        await savePlans(plans);
+      }
+
       return response.message;
     });
 

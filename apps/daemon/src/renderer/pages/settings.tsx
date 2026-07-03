@@ -80,6 +80,8 @@ export default function SettingsPage() {
   const [inputKeys, setInputKeys] = useState<Record<string, string>>({});
   const [healthStatus, setHealthStatus] = useState<Record<string, { status: string; error?: string }>>({});
   const [testingHealth, setTestingHealth] = useState<Record<string, boolean>>({});
+  const [providerModels, setProviderModels] = useState<Record<string, string[]>>({});
+  const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({});
 
   // Config state
   const [config, setConfig] = useState({
@@ -87,10 +89,10 @@ export default function SettingsPage() {
       defaultProvider: 'ollama',
       defaultModel: 'llama3.2:latest',
       providers: {
-        ollama: { baseUrl: 'http://localhost:11434' },
+        ollama: { baseUrl: 'http://127.0.0.1:11434' },
         openai: { model: 'gpt-4o' },
         anthropic: { model: 'claude-3-5-sonnet-20240620' },
-        gemini: { model: 'gemini-2.5-flash' },
+        gemini: { model: 'gemini-1.5-flash' },
         openrouter: { model: 'meta-llama/llama-3-8b-instruct:free' },
         nvidia: { model: 'meta/llama3-8b-instruct' },
         custom: { baseUrl: 'http://localhost:8000/v1', model: 'default' },
@@ -101,6 +103,18 @@ export default function SettingsPage() {
     privacy: { telemetry: false, crashReporting: false, localOnly: true, encryptMemory: false },
     advanced: { logLevel: 'info', maxLogFiles: 10, enableProfiling: false },
   });
+
+  const fetchModels = async (provider: string) => {
+    setLoadingModels(prev => ({ ...prev, [provider]: true }));
+    try {
+      const models = await api.llm.models(provider);
+      setProviderModels(prev => ({ ...prev, [provider]: models }));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingModels(prev => ({ ...prev, [provider]: false }));
+    }
+  };
 
   const checkKeys = async () => {
     const providers = ['openai', 'anthropic', 'gemini', 'openrouter', 'nvidia', 'custom'];
@@ -118,6 +132,10 @@ export default function SettingsPage() {
     }
     setKeysSet(status);
     setCounts(counts);
+    
+    // Automatically fetch models for all providers in the background
+    providers.forEach(p => fetchModels(p));
+    fetchModels('ollama');
   };
 
   // Load config and key status on mount
@@ -323,7 +341,7 @@ export default function SettingsPage() {
                   {[
                     { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o' },
                     { id: 'anthropic', label: 'Anthropic Claude', defaultModel: 'claude-3-5-sonnet-20240620' },
-                    { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-2.5-flash' },
+                    { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-1.5-flash' },
                     { id: 'openrouter', label: 'OpenRouter', defaultModel: 'meta-llama/llama-3-8b-instruct:free' },
                     { id: 'nvidia', label: 'NVIDIA NIM', defaultModel: 'meta/llama3-8b-instruct' },
                   ].map((p) => {
@@ -387,12 +405,30 @@ export default function SettingsPage() {
 
                         {/* Configurable default model for provider */}
                         <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                          <span>Preferred Model</span>
-                          <InputField
-                            value={(config.llm.providers as any)[p.id]?.model || p.defaultModel}
-                            onChange={(v) => updateConfig(`llm.providers.${p.id}.model`, v)}
-                            className="w-56 h-7 text-xs"
-                          />
+                          <div className="flex flex-col gap-1">
+                            <span>Preferred Model</span>
+                            <button onClick={() => fetchModels(p.id)} className="text-[9px] text-accent hover:underline text-left no-drag">
+                              {loadingModels[p.id] ? 'Refreshing...' : 'Refresh Models'}
+                            </button>
+                          </div>
+                          {providerModels[p.id] && providerModels[p.id].length > 0 ? (
+                            <select
+                              value={(config.llm.providers as any)[p.id]?.model || p.defaultModel}
+                              onChange={(e) => updateConfig(`llm.providers.${p.id}.model`, e.target.value)}
+                              className="w-56 h-7 px-2 py-1 rounded-lg bg-glass-strong border border-glass-border text-xs text-foreground outline-none focus:border-accent transition-colors no-drag"
+                            >
+                              {providerModels[p.id].map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <InputField
+                              value={(config.llm.providers as any)[p.id]?.model || p.defaultModel}
+                              onChange={(v) => updateConfig(`llm.providers.${p.id}.model`, v)}
+                              className="w-56 h-7 text-xs"
+                              placeholder="Click 'Refresh Models' or type here"
+                            />
+                          )}
                         </div>
 
                         {/* Test connection action */}

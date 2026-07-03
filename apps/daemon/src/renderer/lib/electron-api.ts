@@ -54,7 +54,7 @@ export interface ElectronAPI {
   llm: {
     generate: (params: { prompt: string; model?: string; systemPrompt?: string }) => Promise<any>;
     stream: (params: { prompt: string; model?: string; systemPrompt?: string; conversationId: string }) => Promise<void>;
-    models: () => Promise<string[]>;
+    models: (providerId: string) => Promise<string[]>;
     health: () => Promise<Record<string, { status: string; error?: string }>>;
     states: () => Promise<Record<string, any>>;
     trackerStats: () => Promise<any>;
@@ -81,14 +81,22 @@ export interface ElectronAPI {
     ollamaPs: () => Promise<any[]>;
   };
   security: {
-    resolveApproval: (id: string, approved: boolean) => Promise<void>;
+    resolveApproval: (id: string, approved: boolean | string) => Promise<void>;
     onRequestApproval: (callback: (request: any) => void) => () => void;
+    getRules: () => Promise<{ persistent: any[], session: any[] }>;
+    deleteRule: (id: string, type: 'persistent' | 'session') => Promise<boolean>;
+    getAuditLogs: (limit?: number) => Promise<any[]>;
+  };
+  plugins: {
+    list: () => Promise<any[]>;
+    uninstall: (id: string) => Promise<{ status: string; error?: string }>;
   };
   workflow: {
     list: () => Promise<any[]>;
     save: (workflow: any) => Promise<{ status: string; error?: string }>;
     delete: (id: string) => Promise<{ status: string; error?: string }>;
     trigger: (eventName: string, payload: any) => Promise<{ status: string; error?: string }>;
+    triggers: () => Promise<any[]>;
   };
   telemetry: {
     logs: (limit?: number, type?: string) => Promise<any[]>;
@@ -173,7 +181,7 @@ function createMockAPI(): ElectronAPI {
     llm: {
       generate: async () => ({ content: 'Mock LLM response' }),
       stream: async () => {},
-      models: async () => ['qwen2.5:8b', 'llama3.1:8b'],
+      models: async (providerId: string) => ['qwen2.5:8b', 'llama3.1:8b'],
       health: async () => ({ ollama: { status: 'mock' } }),
       states: async () => ({}),
       trackerStats: async () => ({}),
@@ -195,14 +203,22 @@ function createMockAPI(): ElectronAPI {
       }),
     },
     security: {
-      resolveApproval: async (id: string, approved: boolean) => { console.log('Mock resolveApproval', id, approved); },
+      resolveApproval: async (id: string, approved: boolean | string) => { console.log('Mock resolveApproval', id, approved); },
       onRequestApproval: (callback: (request: any) => void) => { return () => {}; },
+      getRules: async () => ({ persistent: [], session: [] }),
+      deleteRule: async () => true,
+      getAuditLogs: async () => [],
+    },
+    plugins: {
+      list: async () => [],
+      uninstall: async () => ({ status: 'mock' }),
     },
     workflow: {
       list: async () => [],
       save: async () => ({ status: 'mock' }),
       delete: async () => ({ status: 'mock' }),
       trigger: async () => ({ status: 'mock' }),
+      triggers: async () => [],
     },
     telemetry: {
       logs: async () => [],

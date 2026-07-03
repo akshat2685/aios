@@ -8,13 +8,14 @@ import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app-store';
 
 const navItems = [
-  { id: 'dashboard', path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'chat', path: '/chat', label: 'Companion Chat', icon: MessageSquare },
-  { id: 'projects', path: '/projects', label: 'Projects', icon: FolderGit },
-  { id: 'research', path: '/research', label: 'Research Lab', icon: FlaskConical },
-  { id: 'automation', path: '/automation', label: 'Automation', icon: Zap },
+  { id: 'dashboard', path: '/', label: 'Home', icon: LayoutDashboard },
+  { id: 'chat', path: '/chat', label: 'Chats', icon: MessageSquare },
   { id: 'memory', path: '/memory', label: 'Memory', icon: Database },
+  { id: 'automation', path: '/automation', label: 'Automation', icon: Zap },
+  { id: 'plugins', path: '/plugins', label: 'Plugins', icon: FolderGit },
+  { id: 'security', path: '/security', label: 'Security', icon: ActivitySquare },
   { id: 'diagnostics', path: '/diagnostics', label: 'Diagnostics', icon: ActivitySquare },
+  { id: 'activity', path: '/activity', label: 'Activity Monitor', icon: ActivitySquare },
 ];
 
 const bottomItems = [

@@ -1,4 +1,5 @@
 import { ConfigManager } from '@aios/config';
+import { QdrantClient } from '@qdrant/js-client-rest';
 
 export interface MemoryRecord {
   id: string;
@@ -17,7 +18,7 @@ export interface MemorySearchOptions {
 }
 
 export class MemoryClient {
-  private client: any;
+  private client!: QdrantClient;
   private collectionName: string;
   private config: any;
 
@@ -28,23 +29,15 @@ export class MemoryClient {
 
   async init(): Promise<void> {
     try {
-      const qdrant = await import('qdrant-client');
-      const Api = qdrant.Api;
-      const Distance = qdrant.Distance;
-
-      this.client = new Api({
-        baseUrl: this.config.qdrantUrl || 'http://localhost:6333',
-        baseApiParams: this.config.qdrantApiKey ? {
-          headers: {
-            'api-key': this.config.qdrantApiKey
-          }
-        } : undefined
+      this.client = new QdrantClient({
+        url: this.config.qdrantUrl || 'http://127.0.0.1:6333',
+        apiKey: this.config.qdrantApiKey
       });
 
       // Check if collection exists
       let collectionExists = false;
       try {
-        await this.client.collections.getCollection(this.collectionName);
+        await this.client.getCollection(this.collectionName);
         collectionExists = true;
       } catch (e) {
         // Not found or failed to connect
@@ -53,10 +46,10 @@ export class MemoryClient {
 
       if (!collectionExists) {
         const dim = this.config.embeddingDim || 384;
-        await this.client.collections.createCollection(this.collectionName, {
+        await this.client.createCollection(this.collectionName, {
           vectors: {
             size: dim,
-            distance: Distance.Cosine,
+            distance: 'Cosine',
           },
         });
         this.info(`Created collection ${this.collectionName} with dimension ${dim}`);
@@ -71,7 +64,7 @@ export class MemoryClient {
   async add(record: MemoryRecord): Promise<void> {
     try {
       const vector = await this.getEmbedding(record.content);
-      await this.client.collections.upsertPoints(this.collectionName, {
+      await this.client.upsert(this.collectionName, {
         points: [
           {
             id: record.id,
@@ -112,7 +105,7 @@ export class MemoryClient {
       }
 
       if (points.length > 0) {
-        await this.client.collections.upsertPoints(this.collectionName, {
+        await this.client.upsert(this.collectionName, {
           points,
         });
       }
@@ -126,15 +119,14 @@ export class MemoryClient {
   async search(options: MemorySearchOptions): Promise<MemoryRecord[]> {
     try {
       const vector = await this.getEmbedding(options.query);
-      const response = await this.client.collections.searchPoints(this.collectionName, {
+      const points = await this.client.search(this.collectionName, {
         vector: vector,
         filter: options.filter as any,
         limit: options.limit || 10,
         offset: options.offset || 0,
-        with_payload: true as any,
+        with_payload: true,
       });
 
-      const points = response.data?.result || [];
       return points.map((point: any) => ({
         id: point.id,
         type: point.payload?.type || 'unknown',
@@ -157,7 +149,7 @@ export class MemoryClient {
         return;
       }
       const updatedRecord = { ...record, ...updates, updatedAt: Date.now() };
-      await this.add(updatedRecord);
+      await this.add(updatedRecord as MemoryRecord);
     } catch (error: any) {
       this.error('Failed to update memory record', error);
       throw error;
@@ -166,7 +158,7 @@ export class MemoryClient {
 
   async delete(recordId: string): Promise<void> {
     try {
-      await this.client.collections.deletePoints(this.collectionName, {
+      await this.client.delete(this.collectionName, {
         points: [recordId],
       });
       this.info('Memory record deleted', { id: recordId });
@@ -178,8 +170,7 @@ export class MemoryClient {
 
   async deleteByMetadata(key: string, value: any): Promise<void> {
     try {
-      // Find points matching the metadata criteria
-      const response = await this.client.collections.scrollPoints(this.collectionName, {
+      const response = await this.client.scroll(this.collectionName, {
         filter: {
           must: [
             {
@@ -191,15 +182,15 @@ export class MemoryClient {
           ],
         } as any,
         limit: 10000,
-        with_payload: false as any,
-        with_vector: false as any,
+        with_payload: false,
+        with_vector: false,
       });
 
-      const points = response.data?.result?.points || [];
+      const points = response.points || [];
       const ids = points.map((p: any) => p.id);
 
       if (ids.length > 0) {
-        await this.client.collections.deletePoints(this.collectionName, {
+        await this.client.delete(this.collectionName, {
           points: ids,
         });
         this.info(`Deleted ${ids.length} old memory records for metadata ${key}=${value}`);
@@ -212,20 +203,19 @@ export class MemoryClient {
 
   async getById(recordId: string): Promise<MemoryRecord | null> {
     try {
-      const response = await this.client.collections.getPoints(this.collectionName, {
+      const points = await this.client.retrieve(this.collectionName, {
         ids: [recordId],
-        with_payload: true as any,
+        with_payload: true,
       });
-      const points = response.data?.result || [];
       if (points.length === 0) return null;
       const point = points[0];
       return {
-        id: point.id,
-        type: point.payload?.type || 'unknown',
-        content: point.payload?.content || '',
-        metadata: point.payload?.metadata || {},
-        createdAt: point.payload?.createdAt || Date.now(),
-        updatedAt: point.payload?.updatedAt || Date.now(),
+        id: point.id as string,
+        type: point.payload?.type as string || 'unknown',
+        content: point.payload?.content as string || '',
+        metadata: point.payload?.metadata as Record<string, any> || {},
+        createdAt: point.payload?.createdAt as number || Date.now(),
+        updatedAt: point.payload?.updatedAt as number || Date.now(),
       };
     } catch (error: any) {
       this.error('Failed to get memory record by ID', error);
@@ -235,7 +225,7 @@ export class MemoryClient {
 
   async clear(): Promise<void> {
     try {
-      await this.client.collections.deleteCollection(this.collectionName);
+      await this.client.deleteCollection(this.collectionName);
       await this.init();
       this.info('Memory cleared');
     } catch (error: any) {
@@ -246,12 +236,11 @@ export class MemoryClient {
 
   async getStats(): Promise<Record<string, any>> {
     try {
-      const response = await this.client.collections.getCollection(this.collectionName);
-      const result = response.data?.result;
+      const result = await this.client.getCollection(this.collectionName);
       if (!result) return { points: 0, vectors: 0, status: 'unknown' };
       return {
         points: result.points_count,
-        vectors: result.vectors_count,
+        vectors: (result as any).vectors_count || result.points_count,
         status: result.status,
       };
     } catch (error: any) {
@@ -263,7 +252,6 @@ export class MemoryClient {
   private async getEmbedding(text: string): Promise<number[]> {
     const dim = this.config.embeddingDim || 384;
     try {
-      // Fetch LLM config to find Ollama's host
       const llmConfig = ConfigManager.get('llm') || {};
       const ollamaHost = llmConfig.ollama?.host || 'http://localhost:11434';
       const model = this.config.embeddingModel || 'all-minilm';

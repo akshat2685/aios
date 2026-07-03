@@ -178,10 +178,22 @@ export class OpenAIProvider implements ILLMProvider {
   }
 
   async getSupportedModels(): Promise<string[]> {
-    return [
-      'gpt-4o',
-      'gpt-4-turbo-preview',
-      'gpt-3.5-turbo',
-    ];
+    try {
+      const apiKey = await this.getApiKey();
+      const response = await axios.get('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        timeout: 5000,
+      });
+      // Filter to only chat models (heuristic: starts with gpt or o1)
+      const models = response.data.data.map((m: any) => m.id);
+      return models.filter((m: string) => m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3')).sort();
+    } catch {
+      return [
+        'gpt-4o',
+        'gpt-4o-mini',
+        'gpt-4-turbo-preview',
+        'gpt-3.5-turbo',
+      ];
+    }
   }
 }

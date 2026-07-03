@@ -73,7 +73,7 @@ export class PlannerAgent extends BaseAgent {
     super('Planner', 'Project Planner', router, logger);
     
     // Register planner tools
-    const tools = getPlannerTools();
+    const tools = getPlannerTools(router);
     for (const tool of tools) {
       this.registerTool(tool);
     }

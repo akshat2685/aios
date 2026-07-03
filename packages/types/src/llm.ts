@@ -1,5 +1,32 @@
 export type LLMProviderId = 'ollama' | 'openai' | 'anthropic' | 'gemini' | 'nvidia' | 'openrouter' | 'custom';
 
+export type TaskType = 'GENERAL_CHAT' | 'CODING' | 'REASONING' | 'RESEARCH' | 'VISION' | 'SUMMARIZATION' | 'TRANSLATION' | 'PLANNING' | 'RAG' | 'TOOL_USE';
+
+export type RoutingProfile = 'BALANCED' | 'FASTEST' | 'CHEAPEST' | 'HIGHEST_QUALITY';
+
+export interface ModelCapability {
+  providerId: string;
+  modelId: string;
+  coding: number;
+  reasoning: number;
+  speed: number;
+  cost: number;
+  vision: boolean;
+  contextWindow: number;
+  toolCalling: boolean;
+  streaming: boolean;
+  maxTokens: number;
+}
+
+export interface ProviderHealth {
+  healthy: boolean;
+  avgLatency: number;
+  successRate: number;
+  cooldownUntil: number | null;
+  lastFailure: number | null;
+  consecutiveFailures: number;
+}
+
 export interface LLMRequest {
   prompt: string;
   systemPrompt?: string;
@@ -8,7 +35,7 @@ export interface LLMRequest {
   maxTokens?: number;
   stop?: string[];
   stream?: boolean;
-  taskType?: 'coding' | 'reasoning' | 'chat';
+  taskType?: TaskType;
   agentId?: string;
   priority?: number;
   abortSignal?: AbortSignal;
@@ -47,6 +74,7 @@ export interface ILLMProvider {
 export interface LLMConfig {
   defaultProvider: LLMProviderId;
   defaultModel: string;
+  routingProfile?: RoutingProfile;
   providers: Record<LLMProviderId, {
     apiKey?: string;
     baseUrl?: string;

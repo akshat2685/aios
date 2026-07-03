@@ -53,11 +53,12 @@ async function createApplication() {
     setupSecurityIPC(logger);
 
     // 3. Boot the AIOS Kernel (The brain)
-    kernel = new AIOSKernel(config, logger, async (request) => {
+    kernel = new AIOSKernel(config, logger, async (request, risk) => {
       // Find main window to send prompt to
       const { BrowserWindow } = require('electron');
       const win = BrowserWindow.getAllWindows()[0];
-      return await requestFrontendApproval(request, () => win?.webContents || null);
+      const result = await requestFrontendApproval(request, () => win?.webContents || null);
+      return result as "allow_once" | "allow_session" | "allow_always" | "deny_once" | "deny_always" | "timeout";
     });
     await kernel.boot();
 

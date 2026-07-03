@@ -21,7 +21,7 @@ export class OllamaProvider implements ILLMProvider {
   constructor(config: { baseUrl?: string }, logger: CoreLogger) {
     this.logger = logger;
     this.client = axios.create({
-      baseURL: config.baseUrl || 'http://localhost:11434',
+      baseURL: config.baseUrl || 'http://127.0.0.1:11434',
       timeout: 30000,
     });
     this.initWatchdog();
@@ -86,8 +86,12 @@ export class OllamaProvider implements ILLMProvider {
         },
       };
     } catch (error: any) {
-      this.logger.error(`Ollama generate error: ${error.message}`);
-      throw error;
+      let msg = error.message;
+      if (error.response?.data?.error) {
+         msg = typeof error.response.data.error === 'string' ? error.response.data.error : error.response.data.error.message || msg;
+      }
+      this.logger.error(`Ollama generate error: ${msg}`);
+      throw new Error(msg);
     }
   }
 
@@ -150,8 +154,12 @@ export class OllamaProvider implements ILLMProvider {
           }
         }
       } catch (error: any) {
-        self.logger.error(`Ollama stream error: ${error.message}`);
-        throw error;
+        let msg = error.message;
+        if (error.response?.data?.error) {
+           msg = typeof error.response.data.error === 'string' ? error.response.data.error : error.response.data.error.message || msg;
+        }
+        self.logger.error(`Ollama stream error: ${msg}`);
+        throw new Error(msg);
       }
     }
     return run();

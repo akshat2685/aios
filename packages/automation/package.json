@@ -11,11 +11,13 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@aios/types": "*",
     "@aios/core": "*",
-    "@aios/utils": "*",
     "@aios/llm": "*",
     "@aios/memory": "*",
+    "@aios/types": "*",
+    "@aios/utils": "*",
+    "chokidar": "^3.6.0",
+    "jexl": "^2.3.0",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"
   },

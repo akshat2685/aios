@@ -12,6 +12,9 @@ import { SecretManager, GuardRail } from '@aios/security';
 import { ConfigManager } from '@aios/config';
 import { GraphService } from '@aios/graph';
 import * as os from 'os';
+import { PluginManager } from '@aios/plugins';
+import { EventEmitter } from 'events';
+import { ApprovalRequest, RiskLevel } from '@aios/types';
 
 export class AIOSKernel {
   public logger: CoreLogger;
@@ -25,48 +28,45 @@ export class AIOSKernel {
   public memory: MemoryService;
   public graph: GraphService;
   public security: SecretManager;
+  public plugins: PluginManager;
+  public guardRail: GuardRail;
 
   private isRunning = false;
+  private globalEventBus = new EventEmitter();
+  private approvalCallback?: (request: ApprovalRequest, risk: RiskLevel) => Promise<"allow_once" | "allow_session" | "allow_always" | "deny_once" | "deny_always" | "timeout">;
 
-  private approvalCallback?: (request: any) => Promise<boolean>;
-
-  constructor(config: LLMConfig, logger: CoreLogger, approvalCallback?: (request: any) => Promise<boolean>) {
+  constructor(config: LLMConfig, logger: CoreLogger, approvalCallback?: (request: ApprovalRequest, risk: RiskLevel) => Promise<"allow_once" | "allow_session" | "allow_always" | "deny_once" | "deny_always" | "timeout">) {
     this.logger = logger;
     this.approvalCallback = approvalCallback;
     this.logger.info('Initializing AIOS Kernel...');
 
     const workspacePath = process.env.AIOS_WORKSPACE_PATH || 'C:\\Users\\ijain\\AIOS';
 
-    // Initialize Security Layer
     const masterKey = os.userInfo().username + '_' + os.hostname();
     this.security = new SecretManager(logger, masterKey);
 
-    // 1. Initialize LLM Layer
+    this.guardRail = new GuardRail(logger, {
+      allowDangerousActions: ConfigManager.get('privacy.localOnly') || false,
+      requireApprovalFor: ['shell'],
+      encryptionEnabled: false,
+      airGappedMode: false
+    }, this.approvalCallback);
+
     this.router = new LLMRouter(config, this.security, logger);
-
-    // 2. Initialize Memory Layer
     this.memory = new MemoryService();
-
-    // 2b. Initialize Knowledge Graph
     this.graph = new GraphService(logger);
     this.graph.init().catch(e => logger.error(`Failed to initialize Graph Schema: ${e}`));
 
-    // 3. Initialize Agent Layer
     this.agents = new AgentOrchestrator(
       this.router, 
       logger, 
       workspacePath,
       async (action, details) => {
-        const guard = new GuardRail(logger, {
-          allowDangerousActions: ConfigManager.get('privacy.localOnly') || false,
-          requireApprovalFor: ['shell'],
-          encryptionEnabled: false,
-          airGappedMode: false
-        }, this.approvalCallback);
-        return await guard.requestApproval({
+        return await this.guardRail.requestApproval({
           id: Math.random().toString(36).substring(7),
           agentId: 'coder',
           action: 'shell',
+          target: 'shell',
           params: { details },
           timestamp: Date.now()
         });
@@ -74,7 +74,6 @@ export class AIOSKernel {
       this.memory
     );
 
-    // 4. Initialize Knowledge Ingestion
     this.connectors = new ConnectorManager(logger);
     
     const ingestionConfig = ConfigManager.get('memoryIngestion') || {};
@@ -98,15 +97,11 @@ export class AIOSKernel {
       this.logger.info('No watched paths configured for file system ingestion.');
     }
 
-    // 5. Initialize Automation
     this.automation = new AutomationEngine(logger);
-
-    // 6. Initialize Research
     this.research = new ResearchService(this.router, logger);
-
-    // 7. Initialize DevTools
     this.git = new GitService(workspacePath, logger);
     this.analyzer = new CodeAnalyzer(logger);
+    this.plugins = new PluginManager(logger, this.globalEventBus);
   }
 
   async boot() {
@@ -135,6 +130,12 @@ export class AIOSKernel {
         await this.automation.init();
       } catch (autoError: any) {
         this.logger.warn(`Automation engine initialization failed: ${autoError.message}`);
+      }
+
+      try {
+        await this.plugins.init();
+      } catch (pluginError: any) {
+        this.logger.warn(`Plugin manager initialization failed: ${pluginError.message}`);
       }
 
       this.isRunning = true;

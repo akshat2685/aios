@@ -6,6 +6,8 @@ import { AppSidebar } from '@/components/layout/app-sidebar';
 import { CommandPalette } from '@/components/layout/command-palette';
 import { AgentLauncher } from '@/components/layout/agent-launcher';
 import { ApprovalModal } from '@/components/layout/approval-modal';
+import { StatusBar } from '@/components/layout/status-bar';
+import { NotificationCenter } from '@/components/layout/notification-center';
 import { ParticleCanvas } from '@/components/effects/particle-canvas';
 import { useAppStore } from '@/stores/app-store';
 import { useChatStore } from '@/stores/chat-store';
@@ -20,6 +22,9 @@ import OverlayPage from '@/pages/overlay';
 import MemoryPage from '@/pages/memory';
 import { ProjectsPage } from '@/pages/projects';
 import DiagnosticsPage from '@/pages/diagnostics';
+import SecurityPage from '@/pages/security';
+import PluginsPage from '@/pages/plugins';
+import ActivityMonitorPage from '@/pages/activity';
 
 function AppLayout() {
   const location = useLocation();
@@ -60,8 +65,11 @@ function AppLayout() {
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/research" element={<ResearchPage />} />
               <Route path="/automation" element={<AutomationPage />} />
+              <Route path="/plugins" element={<PluginsPage />} />
               <Route path="/memory" element={<MemoryPage />} />
+              <Route path="/security" element={<SecurityPage />} />
               <Route path="/diagnostics" element={<DiagnosticsPage />} />
+              <Route path="/activity" element={<ActivityMonitorPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </AnimatePresence>
@@ -72,6 +80,10 @@ function AppLayout() {
       <CommandPalette />
       <AgentLauncher />
       <ApprovalModal />
+      <NotificationCenter />
+
+      {/* Footer Status Bar */}
+      <StatusBar />
     </div>
   );
 }
@@ -115,13 +127,34 @@ export function App() {
 
   // Sync model with cloud mode
   useEffect(() => {
-    const { cloudMode } = useAppStore.getState();
-    const chatStore = useChatStore.getState();
-    if (cloudMode === 'online') {
-      chatStore.setSelectedModel('gemini-2.5-flash');
-    } else {
-      chatStore.setSelectedModel('llama3.2:latest');
-    }
+    const syncModel = async () => {
+      const { cloudMode } = useAppStore.getState();
+      const chatStore = useChatStore.getState();
+      const current = chatStore.selectedModel;
+      
+      if (cloudMode === 'local') {
+        // If current model is already a typical local model (no gpt, gemini, claude), keep it
+        if (!current || current.includes('gpt-') || current.includes('gemini-') || current.includes('claude-')) {
+          try {
+            const api = getElectronAPI();
+            const models = await api.system.ollamaModels();
+            if (models && models.length > 0) {
+              chatStore.setSelectedModel(models[0].name);
+            } else {
+              chatStore.setSelectedModel('llama3.2:latest');
+            }
+          } catch {
+            chatStore.setSelectedModel('llama3.2:latest');
+          }
+        }
+      } else {
+        // If switching to cloud and current is a typical local model, pick a cloud default
+        if (!current || !current.includes('-')) {
+           chatStore.setSelectedModel('gemini-1.5-flash');
+        }
+      }
+    };
+    syncModel();
   }, [useAppStore.getState().cloudMode]);
 
   // Listen for agent:launch events from main process
