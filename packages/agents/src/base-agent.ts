@@ -35,9 +35,10 @@ export abstract class BaseAgent {
     let overrideModel = overrides[agentKey]?.model;
     
     // Map agent to TaskType
-    let agentTask: 'coding' | 'reasoning' | 'chat' = 'chat';
-    if (agentKey === 'coder') agentTask = 'coding';
-    if (agentKey === 'planner' || agentKey === 'researcher') agentTask = 'reasoning';
+    import { TaskType } from '@aios/types';
+    let agentTask: TaskType = 'GENERAL_CHAT';
+    if (agentKey === 'coder') agentTask = 'CODING';
+    if (agentKey === 'planner' || agentKey === 'researcher') agentTask = 'REASONING';
 
     // Build tool descriptions
     let toolPrompt = '';

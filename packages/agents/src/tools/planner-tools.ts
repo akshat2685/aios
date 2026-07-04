@@ -291,7 +291,7 @@ Each object must have exactly two string fields:
             model: '',
             systemPrompt: 'You are an AIOS internal component. Output raw JSON only.',
             priority: 1,
-            taskType: 'reasoning'
+            taskType: 'REASONING'
           };
 
           const response = await router.generate(llmReq);

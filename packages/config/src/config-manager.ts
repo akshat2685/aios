@@ -15,7 +15,10 @@ export const ConfigSchema = z.object({
   startMinimized: z.boolean().default(false),
   cloudMode: z.enum(['local', 'online']).default('local'),
   llm: z.object({
-    defaultProvider: z.enum(['ollama', 'lmstudio', 'openai', 'anthropic', 'local']).default('ollama'),
+    defaultProvider: z.enum(['ollama', 'lmstudio', 'openai', 'anthropic', 'gemini', 'nvidia', 'openrouter', 'custom', 'local']).default('ollama'),
+    routingProfile: z.enum(['BALANCED', 'FASTEST', 'CHEAPEST', 'HIGHEST_QUALITY']).default('BALANCED'),
+    cloudMode: z.enum(['local', 'online']).default('local'),
+    routingMode: z.enum(['automatic', 'advanced']).default('automatic'),
     ollama: z.object({
       host: z.string().default('http://127.0.0.1:11434'),
       model: z.string().default('llama3.2'),
@@ -28,13 +31,44 @@ export const ConfigSchema = z.object({
     }),
     openai: z.object({
       apiKey: z.string().optional(),
-      model: z.string().default('gpt-4-turbo-preview'),
+      model: z.string().default('gpt-4o'),
       baseUrl: z.string().optional(),
     }),
     anthropic: z.object({
       apiKey: z.string().optional(),
-      model: z.string().default('claude-3-opus-20240229'),
+      model: z.string().default('claude-3-5-sonnet-20241022'),
     }),
+    gemini: z.object({
+      apiKey: z.string().optional(),
+      model: z.string().default('gemini-1.5-pro'),
+    }),
+    nvidia: z.object({
+      apiKey: z.string().optional(),
+      model: z.string().default('nemotron-3-ultra'),
+    }),
+    openrouter: z.object({
+      apiKey: z.string().optional(),
+      model: z.string().default('meta-llama/llama-3-8b-instruct:free'),
+    }),
+    custom: z.object({
+      apiKey: z.string().optional(),
+      baseUrl: z.string().optional(),
+      model: z.string().default(''),
+    }),
+    // Local model preferences
+    localModels: z.object({
+      generalModel: z.string().optional(),
+      codingModel: z.string().optional(),
+    }).optional(),
+    // User preferences for routing
+    userPreferences: z.object({
+      preferLocal: z.boolean().default(false),
+      preferOpenSource: z.boolean().default(false),
+      preferCheapest: z.boolean().default(false),
+      preferredProviders: z.array(z.string()).optional(),
+      disabledProviders: z.array(z.string()).optional(),
+      disabledModels: z.array(z.string()).optional(),
+    }).optional(),
   }),
   memory: z.object({
     databasePath: z.string().default(''),
@@ -109,6 +143,9 @@ const DEFAULT_CONFIG: Config = {
   cloudMode: 'local',
   llm: {
     defaultProvider: 'ollama',
+    routingProfile: 'BALANCED',
+    cloudMode: 'local',
+    routingMode: 'automatic',
     ollama: {
       host: 'http://127.0.0.1:11434',
       model: 'llama3.2',
@@ -120,10 +157,31 @@ const DEFAULT_CONFIG: Config = {
       model: '',
     },
     openai: {
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
     },
     anthropic: {
-      model: 'claude-3-opus-20240229',
+      model: 'claude-3-5-sonnet-20241022',
+    },
+    gemini: {
+      model: 'gemini-1.5-pro',
+    },
+    nvidia: {
+      model: 'nemotron-3-ultra',
+    },
+    openrouter: {
+      model: 'meta-llama/llama-3-8b-instruct:free',
+    },
+    custom: {
+      model: '',
+    },
+    localModels: {
+      generalModel: 'llama3.2:latest',
+      codingModel: 'qwen2.5-coder:7b',
+    },
+    userPreferences: {
+      preferLocal: false,
+      preferOpenSource: false,
+      preferCheapest: false,
     },
   },
   memory: {
@@ -141,7 +199,7 @@ const DEFAULT_CONFIG: Config = {
     fileWatcher: {
       enabled: true,
       paths: [],
-      excludePatterns: ['node_modules', '.git', 'dist', 'build', '*.log', '*.tmp'],
+      excludePatterns: ['node_modules', '.git', 'dist', 'build', 'build', '*.log', '*.tmp'],
       debounceMs: 1000,
     },
     clipboard: {

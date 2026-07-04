@@ -169,7 +169,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
-  // ─── 4. LLM operations ────────────────────────────────────
+  // ─── 5. LLM operations ────────────────────────────────────
   const activeStreams = new Map<string, boolean>();
 
   ipcMain.handle('llm:health', async () => {
@@ -219,6 +219,126 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     } catch (e: any) {
       logger.error(`llm:models failed for ${providerId}: ${e.message}`);
       return [];
+    }
+  });
+
+  // ─── Router Diagnostics ──────────────────────────────────
+  ipcMain.handle('llm:diagnostics', async () => {
+    try {
+      return kernel.router.getDiagnostics();
+    } catch (e: any) {
+      logger.error(`llm:diagnostics failed: ${e.message}`);
+      return { providerHealth: {}, availableModels: [], routingHistory: [], cooldowns: {} };
+    }
+  });
+
+  ipcMain.handle('llm:config:get', async () => {
+    try {
+      const allConfig = ConfigManager.getAll();
+      return allConfig.llm;
+    } catch (e: any) {
+      logger.error(`llm:config:get failed: ${e.message}`);
+      return {};
+    }
+  });
+
+  ipcMain.handle('llm:config:set', async (_, key: string, value: any) => {
+    try {
+      ConfigManager.set(`llm.${key}`, value);
+      ConfigManager.save();
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:config:set failed for ${key}: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:disable-provider', async (_, providerId: string) => {
+    try {
+      kernel.router.disableProvider(providerId as any);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:disable-provider failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:enable-provider', async (_, providerId: string) => {
+    try {
+      kernel.router.enableProvider(providerId as any);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:enable-provider failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:disable-model', async (_, modelId: string) => {
+    try {
+      kernel.router.disableModel(modelId);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:disable-model failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:set-routing-profile', async (_, profile: string) => {
+    try {
+      kernel.router.setRoutingProfile(profile as any);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:set-routing-profile failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:set-cloud-mode', async (_, mode: string) => {
+    try {
+      kernel.router.setCloudMode(mode as any);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:set-cloud-mode failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:set-routing-mode', async (_, mode: string) => {
+    try {
+      kernel.router.setRoutingMode(mode as any);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:set-routing-mode failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:set-user-preferences', async (_, prefs: any) => {
+    try {
+      kernel.router.setUserPreferences(prefs);
+      return { status: 'success' };
+    } catch (e: any) {
+      logger.error(`llm:set-user-preferences failed: ${e.message}`);
+      return { status: 'error', error: e.message };
+    }
+  });
+
+  ipcMain.handle('llm:discover-models', async () => {
+    try {
+      const providers = (kernel.router as any).providers;
+      return await (kernel.router as any).registry.discoverModels(providers);
+    } catch (e: any) {
+      logger.error(`llm:discover-models failed: ${e.message}`);
+      return [];
+    }
+  });
+
+  ipcMain.handle('llm:local-models', async () => {
+    try {
+      return (kernel.router as any).registry.getLocalModels();
+    } catch (e: any) {
+      logger.error(`llm:local-models failed: ${e.message}`);
+      return { general: [], coding: [] };
     }
   });
 
@@ -307,7 +427,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     return { status: 'stopped' };
   });
 
-  // ─── 5. Research operations ───────────────────────────────
+  // ─── 6. Research operations ───────────────────────────────
   ipcMain.handle('research:conduct', async (_, { query }) => {
     try {
       logger.info(`Starting research for query: ${query}`);
@@ -335,7 +455,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
-  // ─── 6. System operations ─────────────────────────────────
+  // ─── 7. System operations ─────────────────────────────────
   ipcMain.handle('system:status', async () => {
     try {
       const health = await kernel.router.checkAllHealth();
@@ -356,7 +476,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
-  // ─── 7. Window controls ───────────────────────────────────
+  // ─── 8. Window controls ───────────────────────────────────
   ipcMain.handle('app:quit', () => {
     const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
     if (win) win.close();
@@ -415,7 +535,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     { name: 'testing', description: 'Create and interpret unit, integration, and end-to-end tests.', capabilities: ['unit_tests', 'integration_tests', 'e2e_tests'], icon: '🧪' },
     { name: 'security', description: 'Review dependencies, static analysis findings, and secret risks.', capabilities: ['dependency_scanning', 'static_analysis', 'secret_detection'], icon: '🛡️' },
     { name: 'docs', description: 'Produce architecture, API, and user-facing documentation.', capabilities: ['readme', 'architecture_docs', 'api_docs'], icon: '📝' },
-  ];
+  };
 
   ipcMain.handle('adk:list-agents', async () => {
     try {

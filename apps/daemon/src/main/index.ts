@@ -13,7 +13,7 @@ import { setupIPC } from './ipc';
 import { createTray } from './tray';
 import { setupAutoLaunch } from './autolaunch';
 import { setupCrashReporter } from '../crash-reporter';
-import { LLMConfig } from '@aios/types';
+import { LLMConfig, UserPreferences } from '@aios/types';
 import { setupSecurityIPC, requestFrontendApproval } from './security-ipc';
 
 const logger = CoreLogger.getInstance();
@@ -35,18 +35,46 @@ async function createApplication() {
   const config: LLMConfig = {
     defaultProvider: allConfig.llm.defaultProvider as any,
     defaultModel: allConfig.llm.ollama.model,
+    routingProfile: allConfig.llm.routingProfile,
+    cloudMode: allConfig.llm.cloudMode,
+    routingMode: allConfig.llm.routingMode,
     providers: {
       ollama: {
         baseUrl: allConfig.llm.ollama.host,
+        model: allConfig.llm.ollama.model,
       },
       openai: {
         apiKey: allConfig.llm.openai.apiKey,
+        model: allConfig.llm.openai.model,
         baseUrl: allConfig.llm.openai.baseUrl,
       },
       anthropic: {
         apiKey: allConfig.llm.anthropic.apiKey,
+        model: allConfig.llm.anthropic.model,
+      },
+      gemini: {
+        apiKey: allConfig.llm.gemini?.apiKey,
+        model: allConfig.llm.gemini?.model,
+      },
+      nvidia: {
+        apiKey: allConfig.llm.nvidia?.apiKey,
+        model: allConfig.llm.nvidia?.model,
+      },
+      openrouter: {
+        apiKey: allConfig.llm.openrouter?.apiKey,
+        model: allConfig.llm.openrouter?.model,
+      },
+      custom: {
+        apiKey: allConfig.llm.custom?.apiKey,
+        baseUrl: allConfig.llm.custom?.baseUrl,
+        model: allConfig.llm.custom?.model,
       }
-    } as any
+    },
+    localModels: allConfig.llm.localModels,
+    userPreferences: allConfig.llm.userPreferences,
+    agentBudgets: allConfig.agents?.modelOverrides ? Object.fromEntries(
+      Object.entries(allConfig.agents.modelOverrides).map(([k, v]: [string, any]) => [k, { maxTokens: 100000 }])
+    ) : undefined,
   };
 
   try {

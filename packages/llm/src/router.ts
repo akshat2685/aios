@@ -1,4 +1,19 @@
-import { LLMProviderId, ILLMProvider, LLMRequest, LLMResponse, LLMStreamResponse } from '@aios/types';
+import { 
+  LLMProviderId, 
+  ILLMProvider, 
+  LLMRequest, 
+  LLMResponse, 
+  LLMStreamResponse, 
+  TaskType, 
+  RoutingProfile, 
+  ModelCapability, 
+  ProviderHealthState, 
+  RoutingDecision,
+  ModelScore,
+  UserPreferences,
+  CloudMode,
+  RoutingMode
+} from '@aios/types';
 import { OllamaProvider } from './providers/ollama';
 import { OpenAIProvider } from './providers/openai';
 import { AnthropicProvider } from './providers/anthropic';
@@ -12,12 +27,11 @@ import { SecretManager } from '@aios/security';
 import { LLMTracker } from './tracker';
 import { LLMCache } from './cache';
 import { TelemetryEngine } from '@aios/core';
-
 import { RequestManager } from './queue';
 import { ModelRegistry } from './registry';
 import { TaskClassifier } from './classifier';
 import { IntelligentScorer } from './scorer';
-import { TaskType, RoutingProfile } from '@aios/types';
+
 export interface ProviderState {
   healthy: boolean;
   rateLimited: boolean;
@@ -29,6 +43,9 @@ export interface ProviderState {
   successCount: number;
   errorCount: number;
   circuitState: 'closed' | 'open' | 'half-open';
+  lastRequestTime: number;
+  totalRequests: number;
+  totalErrors: number;
 }
 
 export class LLMRouter {
@@ -44,8 +61,14 @@ export class LLMRouter {
 
   private providerStates: Map<string, ProviderState> = new Map();
   private readonly CIRCUIT_BREAKER_TRIP_LIMIT = 3;
-  private readonly RATE_LIMIT_COOLING_MS = 15 * 60 * 1000; // 15 minutes circuit breaker
+  private readonly RATE_LIMIT_COOLING_MS = 15 * 60 * 1000; // 15 minutes
   private readonly QUOTA_COOLING_MS = 5 * 60 * 60 * 1000; // 5 hours
+  private readonly MIN_COOLDOWN_MS = 30 * 1000; // 30 seconds minimum
+
+  // Diagnostics
+  private routingHistory: RoutingDecision[] = [];
+  private readonly MAX_HISTORY = 100;
+  private lastDiagnostics: any = null;
 
   constructor(config: LLMConfig, security: SecretManager, logger: CoreLogger) {
     this.config = config;
@@ -66,6 +89,7 @@ export class LLMRouter {
     this.registerProvider(new CustomProvider(security, logger));
 
     this.startWatchdog();
+    this.startModelDiscovery();
   }
 
   private startWatchdog() {
@@ -74,23 +98,37 @@ export class LLMRouter {
       for (const [id, health] of Object.entries(healthStates)) {
         const state = this.getState(id);
         if (health.status === 'healthy') {
-          // If previously tripped but now healthy and cooldown expired
           if (!state.healthy && (!state.cooldownUntil || Date.now() > state.cooldownUntil)) {
             state.healthy = true;
             state.rateLimited = false;
             state.quotaExhausted = false;
             state.consecutive429Count = 0;
             state.cooldownUntil = null;
+            state.circuitState = 'closed';
+            this.logger.info(`Watchdog: Provider ${id} recovered and marked healthy`);
           }
         } else {
-          // Only mark unhealthy if it's not a circuit-breaker related offline (e.g. general disconnect)
           if (state.healthy && !state.rateLimited && !state.quotaExhausted) {
-             state.healthy = false;
-             this.telemetry.logSystem(`Watchdog detected provider ${id} went unhealthy.`, 'WARN');
+            state.healthy = false;
+            this.logger.warn(`Watchdog: Provider ${id} went unhealthy`, { error: health.error });
           }
         }
       }
     }, 60000); // Check every 60 seconds
+  }
+
+  private startModelDiscovery() {
+    // Run discovery every 6 hours
+    setInterval(async () => {
+      try {
+        await this.registry.discoverModels(this.providers);
+      } catch (e: any) {
+        this.logger.warn(`Model discovery failed: ${e.message}`);
+      }
+    }, 6 * 60 * 60 * 1000);
+
+    // Initial discovery
+    setTimeout(() => this.registry.discoverModels(this.providers), 5000);
   }
 
   public getProviderStates(): Record<string, ProviderState> {
@@ -98,40 +136,36 @@ export class LLMRouter {
     for (const [id, state] of this.providerStates.entries()) {
       states[id] = { ...state };
     }
-    // Also include default healthy state for registered providers that haven't been used yet
+    // Include default healthy state for registered providers
     for (const id of this.providers.keys()) {
       if (!states[id]) {
-        states[id] = {
-          healthy: true,
-          rateLimited: false,
-          quotaExhausted: false,
-          cooldownUntil: null,
-          latency: 0,
-          consecutive429Count: 0,
-          consecutiveFailures: 0,
-          successCount: 0,
-          errorCount: 0,
-          circuitState: 'closed'
-        };
+        states[id] = this.getDefaultState();
       }
     }
     return states;
   }
 
+  private getDefaultState(): ProviderState {
+    return {
+      healthy: true,
+      rateLimited: false,
+      quotaExhausted: false,
+      cooldownUntil: null,
+      latency: 0,
+      consecutive429Count: 0,
+      consecutiveFailures: 0,
+      successCount: 0,
+      errorCount: 0,
+      circuitState: 'closed',
+      lastRequestTime: 0,
+      totalRequests: 0,
+      totalErrors: 0
+    };
+  }
+
   private getState(providerId: string): ProviderState {
     if (!this.providerStates.has(providerId)) {
-      this.providerStates.set(providerId, {
-        healthy: true,
-        rateLimited: false,
-        quotaExhausted: false,
-        cooldownUntil: null,
-        latency: 0,
-        consecutive429Count: 0,
-        consecutiveFailures: 0,
-        successCount: 0,
-        errorCount: 0,
-        circuitState: 'closed'
-      });
+      this.providerStates.set(providerId, this.getDefaultState());
     }
     return this.providerStates.get(providerId)!;
   }
@@ -139,7 +173,6 @@ export class LLMRouter {
   async registerProvider(provider: ILLMProvider) {
     this.providers.set(provider.id, provider);
     
-    // Assign specific rate limits per provider
     let maxConcurrent = 2;
     let maxRpm = 10;
 
@@ -173,6 +206,7 @@ export class LLMRouter {
         state.consecutiveFailures = 0;
         state.consecutive429Count = 0;
         state.successCount++;
+        state.totalRequests++;
         if (state.circuitState === 'half-open') {
           state.circuitState = 'closed';
           state.healthy = true;
@@ -211,31 +245,33 @@ export class LLMRouter {
         this.logger.warn(`Provider ${providerId} failed (attempt ${attempt}/${maxAttempts}): ${error.message}. Retrying in ${delay}ms...`);
         this.telemetry.logSystem(`Retry ${attempt} for ${providerId} due to ${error.message}`, 'DEBUG', { delay });
         
-        // Full Jitter Backoff: sleep = random_between(0, min(cap, base * 2^attempt))
+        // Full Jitter Backoff
         const jitteredDelay = Math.random() * delay;
         await new Promise((resolve) => setTimeout(resolve, jitteredDelay));
-        delay = Math.min(10000, delay * 2); // Cap backoff at 10s
+        delay = Math.min(10000, delay * 2);
       }
     }
     throw new Error('Unreachable code');
   }
 
-  private isProviderCooling(providerId: string): boolean {
+  private isProviderAvailable(providerId: string): boolean {
     const state = this.getState(providerId);
+    
+    // Check circuit breaker
     if (state.circuitState === 'open') {
       if (state.cooldownUntil && Date.now() >= state.cooldownUntil) {
         // Cooldown expired, move to half-open
         state.cooldownUntil = null;
         state.circuitState = 'half-open';
-        state.healthy = true; // allow one request through
+        state.healthy = true;
         this.logger.info(`Provider ${providerId} circuit moved to half-open state.`);
-        return false;
+        return true;
       }
-      return true; // Still cooling down in open state
+      return false;
     }
     
-    // Legacy cooldown logic for completeness
-    if (state.cooldownUntil && Date.now() < state.cooldownUntil) return true;
+    // Check legacy cooldown
+    if (state.cooldownUntil && Date.now() < state.cooldownUntil) return false;
     if (state.cooldownUntil && Date.now() >= state.cooldownUntil) {
       state.cooldownUntil = null;
       state.rateLimited = false;
@@ -244,53 +280,365 @@ export class LLMRouter {
       state.consecutive429Count = 0;
       state.circuitState = 'closed';
     }
-    return false;
+    
+    return state.healthy && !state.rateLimited && !state.quotaExhausted;
   }
 
-  private getBestModel(request: LLMRequest, excludeProviders: string[] = []): { providerId: LLMProviderId, model: string } | null {
+  /**
+   * Core routing logic with full explainability
+   */
+  private selectBestModel(request: LLMRequest, excludeProviders: string[] = []): { 
+    providerId: LLMProviderId; 
+    model: string; 
+    decision: RoutingDecision 
+  } | null {
     // 1. Classify Task
     let taskType: TaskType = request.taskType as TaskType;
+    let classificationConfidence = 1.0;
+    
     if (!taskType) {
-      const { type } = TaskClassifier.classify(request.prompt);
-      taskType = type;
+      const classification = TaskClassifier.classify(request.prompt);
+      taskType = classification.type;
+      classificationConfidence = classification.confidence;
     }
 
     const profile: RoutingProfile = this.config.routingProfile || 'BALANCED';
+    const cloudMode: CloudMode = this.config.cloudMode || 'local';
+    const routingMode: RoutingMode = this.config.routingMode || 'automatic';
+    const userPrefs: UserPreferences = this.config.userPreferences || {};
 
-    // 2. Fetch Capabilities
+    // 2. Handle Advanced Mode - Force specific provider/model
+    if (routingMode === 'advanced' && request.forceProvider) {
+      const provider = this.providers.get(request.forceProvider);
+      if (provider && this.isProviderAvailable(request.forceProvider)) {
+        const model = request.forceModel || this.config.defaultModel;
+        const cap = this.registry.getCapability(request.forceProvider, model);
+        
+        return {
+          providerId: request.forceProvider,
+          model,
+          decision: {
+            selectedProvider: request.forceProvider,
+            selectedModel: model,
+            taskType,
+            confidence: 1.0,
+            profile,
+            scores: [],
+            reason: 'Advanced mode: User forced provider/model'
+          }
+        };
+      }
+    }
+
+    // 3. Get all capabilities
     const allModels = this.registry.getAllCapabilities();
     let bestScore = -Infinity;
-    let bestModel: { providerId: LLMProviderId, model: string } | null = null;
+    let bestModel: { providerId: LLMProviderId, model: string, capability: ModelCapability } | null = null;
+    const allScores: ModelScore[] = [];
 
-    const isLocal = this.config.defaultProvider === 'ollama';
+    // Build health map
+    const healthMap = new Map<string, ProviderHealthState>();
+    for (const [providerId, state] of this.providerStates.entries()) {
+      healthMap.set(providerId, {
+        healthy: state.healthy,
+        avgLatency: state.latency,
+        successRate: state.totalRequests > 0 ? state.successCount / state.totalRequests : 1,
+        consecutiveFailures: state.consecutiveFailures,
+        cooldownUntil: state.cooldownUntil,
+        lastFailure: state.lastRequestTime,
+        totalRequests: state.totalRequests,
+        totalErrors: state.totalErrors
+      });
+    }
+
+    const isLocalMode = cloudMode === 'local';
 
     for (const cap of allModels) {
       if (!this.providers.has(cap.providerId as LLMProviderId)) continue;
       if (excludeProviders.includes(cap.providerId)) continue;
-      if (this.isProviderCooling(cap.providerId)) continue;
+      if (!this.isProviderAvailable(cap.providerId)) continue;
 
-      if (isLocal && cap.providerId !== 'ollama') continue;
-      if (!isLocal && cap.providerId === 'ollama') continue;
+      // Cloud mode filtering
+      if (isLocalMode && !cap.isLocal) continue;
+      if (!isLocalMode && cap.isLocal) continue;
 
-      const score = IntelligentScorer.score(cap, taskType, profile);
+      // User preference filtering
+      if (userPrefs.disabledProviders?.includes(cap.providerId as LLMProviderId)) continue;
+      if (userPrefs.disabledModels?.includes(cap.modelId)) continue;
+
+      // Score the model
+      const health = healthMap.get(cap.providerId) || {
+        healthy: true,
+        avgLatency: 0,
+        successRate: 1,
+        consecutiveFailures: 0,
+        cooldownUntil: null,
+        lastFailure: null,
+        totalRequests: 0,
+        totalErrors: 0
+      };
+
+      const { score, penalties } = IntelligentScorer.score(cap, taskType, profile, health, userPrefs);
+
+      allScores.push({
+        providerId: cap.providerId,
+        modelId: cap.modelId,
+        score,
+        capabilities: cap,
+        health,
+        penalties
+      });
 
       if (score > bestScore) {
         bestScore = score;
-        bestModel = { providerId: cap.providerId as LLMProviderId, model: cap.modelId };
+        bestModel = { providerId: cap.providerId as LLMProviderId, model: cap.modelId, capability: cap };
       }
     }
 
-    if (bestModel) {
-      this.logger.info(`Routing decision: Selected ${bestModel.model} from ${bestModel.providerId} with score ${bestScore.toFixed(3)} for task ${taskType}`);
-    } else {
-      this.logger.warn(`Routing decision: No eligible models found for task ${taskType}`);
-    }
+    // Sort scores for explainability
+    allScores.sort((a, b) => b.score - a.score);
 
-    return bestModel;
+    if (bestModel) {
+      const topScore = allScores[0];
+      const reason = this.generateReason(bestModel.capability, taskType, profile, topScore, classificationConfidence);
+      
+      const decision: RoutingDecision = {
+        selectedProvider: bestModel.providerId,
+        selectedModel: bestModel.model,
+        taskType,
+        confidence: classificationConfidence,
+        profile,
+        scores: allScores.slice(0, 5), // Top 5 for diagnostics
+        reason,
+        fallbackReason: excludeProviders.length > 0 ? `Fallback from: ${excludeProviders.join(', ')}` : undefined
+      };
+
+      this.logger.info(`Routing: ${bestModel.model} from ${bestModel.providerId} (score: ${bestScore.toFixed(2)}) for ${taskType} [${profile}]`);
+      
+      return { providerId: bestModel.providerId, model: bestModel.model, decision };
+    } else {
+      this.logger.warn(`No eligible models found for task ${taskType} with exclusions: ${excludeProviders.join(', ')}`);
+      return null;
+    }
   }
 
-  private getNextAvailableProvider(request: LLMRequest, excludeProviders: string[] = []): { providerId: LLMProviderId, model: string } | null {
-    return this.getBestModel(request, excludeProviders);
+  private generateReason(
+    capability: ModelCapability, 
+    taskType: TaskType, 
+    profile: RoutingProfile,
+    topScore: ModelScore,
+    classificationConfidence: number
+  ): string {
+    const reasons: string[] = [];
+    
+    // Task-specific reason
+    switch (taskType) {
+      case 'CODING':
+        reasons.push(`Coding Score: ${capability.coding}/10`);
+        break;
+      case 'REASONING':
+      case 'PLANNING':
+        reasons.push(`Reasoning Score: ${capability.reasoning}/10`);
+        break;
+      case 'VISION':
+        reasons.push(capability.vision ? 'Vision capable ✓' : '⚠ No vision capability');
+        break;
+      case 'TOOL_USE':
+        reasons.push(capability.toolCalling ? 'Tool calling ✓' : '⚠ No tool calling');
+        break;
+    }
+
+    // Profile reason
+    switch (profile) {
+      case 'FASTEST':
+        reasons.push(`Speed: ${capability.speed}/10 (Fastest profile)`);
+        break;
+      case 'CHEAPEST':
+        reasons.push(`Cost: ${capability.cost}/10 (Cheapest profile)`);
+        break;
+      case 'HIGHEST_QUALITY':
+        reasons.push(`Quality optimized (Reasoning: ${capability.reasoning}, Coding: ${capability.coding})`);
+        break;
+    }
+
+    // Context window
+    if (capability.contextWindow >= 100000) {
+      reasons.push(`Context: ${(capability.contextWindow/1000).toFixed(0)}K tokens`);
+    }
+
+    // Provider health
+    const health = this.getState(capability.providerId);
+    if (health.healthy) {
+      reasons.push('Provider Healthy ✓');
+    }
+
+    // Confidence
+    if (classificationConfidence < 0.6) {
+      reasons.push(`⚠ Low classification confidence (${(classificationConfidence*100).toFixed(0)}%)`);
+    }
+
+    return reasons.join(' | ');
+  }
+
+  private resolveTask(request: LLMRequest): { providerId: LLMProviderId; model: string; decision: RoutingDecision } {
+    const best = this.selectBestModel(request);
+    if (best) return best;
+    
+    // Fallback to defaults
+    const defaultProvider = this.config.defaultProvider || 'ollama';
+    const defaultModel = request.model || this.config.defaultModel || 'llama3.2:latest';
+    
+    return {
+      providerId: defaultProvider,
+      model: defaultModel,
+      decision: {
+        selectedProvider: defaultProvider,
+        selectedModel: defaultModel,
+        taskType: request.taskType || 'GENERAL_CHAT',
+        confidence: 0.3,
+        profile: this.config.routingProfile || 'BALANCED',
+        scores: [],
+        reason: 'Fallback to default (no eligible models found)'
+      }
+    };
+  }
+
+  async generate(request: LLMRequest): Promise<LLMResponse> {
+    this.checkAgentBudget(request.agentId);
+    
+    const { providerId, model, decision } = this.resolveTask(request);
+    request.model = model;
+
+    if (!this.isProviderAvailable(providerId)) {
+      const fallback = this.selectBestModel(request, [providerId]);
+      if (fallback) {
+        request.model = fallback.model;
+        decision.fallbackReason = `Initial provider cooling down, failed over to ${fallback.providerId}`;
+      }
+    }
+
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      throw new Error(`LLM Provider ${providerId} is not registered`);
+    }
+
+    const cached = this.cache.get(request);
+    if (cached) {
+      this.logger.info(`Cache hit for prompt: ${request.prompt.substring(0, 50)}...`);
+      this.telemetry.logCache(`Cache hit for ${providerId}:${request.model}`, true, { promptLength: request.prompt.length });
+      return { ...cached, routingDecision: decision };
+    }
+    
+    this.telemetry.logCache(`Cache miss for ${providerId}:${request.model}`, false, { promptLength: request.prompt.length });
+
+    try {
+      const requestManager = this.requestManagers.get(providerId);
+      if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
+
+      const startTime = Date.now();
+      const response = await this.executeWithRetry(providerId, () => 
+        requestManager.enqueue(() => provider.generate(request), request.priority)
+      );
+      const latency = Date.now() - startTime;
+
+      // Update health metrics
+      this.updateHealthOnSuccess(providerId, latency);
+
+      this.tracker.trackUsage(
+        providerId,
+        request.model,
+        response.usage.promptTokens,
+        response.usage.completionTokens,
+        request.agentId
+      );
+      
+      this.telemetry.logRequest({
+        provider: providerId,
+        model: request.model,
+        agent: request.agentId,
+        tokens_in: response.usage.promptTokens,
+        tokens_out: response.usage.completionTokens,
+        latency,
+        status: 200,
+        requestPayload: JSON.stringify({ prompt: request.prompt, systemPrompt: request.systemPrompt }),
+        responsePayload: JSON.stringify({ content: response.content })
+      });
+      
+      this.cache.set(request, response);
+      
+      // Record routing decision
+      this.recordRoutingDecision({ ...decision, providerId, model });
+      
+      return { ...response, routingDecision: decision };
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.message?.toLowerCase().includes('abort')) {
+        this.logger.info(`Request to ${providerId} was aborted by user.`);
+        throw error;
+      }
+      this.logger.error(`Provider ${providerId} failed: ${error.message}. Attempting failover...`);
+      this.telemetry.logError(`Provider ${providerId} failed`, error.name || 'APIError', { message: error.message });
+      
+      return await this.handleFallback(request, [providerId], error, decision);
+    }
+  }
+
+  async *stream(request: LLMRequest): AsyncGenerator<LLMStreamResponse> {
+    this.checkAgentBudget(request.agentId);
+    
+    const { providerId, model, decision } = this.resolveTask(request);
+    request.model = model;
+
+    if (!this.isProviderAvailable(providerId)) {
+      const fallback = this.selectBestModel(request, [providerId]);
+      if (fallback) {
+        request.model = fallback.model;
+        decision.fallbackReason = `Initial provider cooling down, failed over to ${fallback.providerId}`;
+      }
+    }
+
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      throw new Error(`LLM Provider ${providerId} is not registered`);
+    }
+
+    try {
+      const requestManager = this.requestManagers.get(providerId);
+      if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
+
+      const startTime = Date.now();
+      const generator = await requestManager.enqueue(() => provider.stream(request), request.priority);
+      let promptTokens = 0;
+      let completionTokens = 0;
+
+      for await (const chunk of generator) {
+        if (chunk.usage) {
+          promptTokens = chunk.usage.promptTokens || promptTokens;
+          completionTokens = chunk.usage.completionTokens || completionTokens;
+        }
+        yield chunk;
+      }
+
+      const latency = Date.now() - startTime;
+      this.updateHealthOnSuccess(providerId, latency);
+
+      if (promptTokens > 0 || completionTokens > 0) {
+        this.tracker.trackUsage(providerId, request.model, promptTokens, completionTokens, request.agentId);
+      }
+      
+      this.recordRoutingDecision({ ...decision, providerId, model });
+      
+      // Yield final decision info
+      yield { chunk: '', done: true, usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } };
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.message?.toLowerCase().includes('abort')) {
+        this.logger.info(`Stream to ${providerId} was aborted by user.`);
+        throw error;
+      }
+      this.logger.error(`Stream failed for ${providerId}: ${error.message}. Attempting failover...`);
+      this.telemetry.logError(`Stream failed for ${providerId}`, error.name || 'APIError', { message: error.message });
+      
+      yield* this.handleFallbackStream(request, [providerId], error, decision);
+    }
   }
 
   private checkAgentBudget(agentId?: string): void {
@@ -306,185 +654,81 @@ export class LLMRouter {
     }
   }
 
-  async generate(request: LLMRequest): Promise<LLMResponse> {
-    this.checkAgentBudget(request.agentId);
-    let { providerId, model: requestModel } = this.resolveTask(request);
-    request.model = requestModel; // Update request with resolved model
-
-    if (this.isProviderCooling(providerId)) {
-      const fallback = this.getNextAvailableProvider(request, []);
-      if (fallback) {
-        providerId = fallback.providerId;
-        request.model = fallback.model;
-      }
-    }
-
-    const provider = this.providers.get(providerId);
-    if (!provider) {
-      throw new Error(`LLM Provider ${providerId} is not registered`);
-    }
-
-    const cached = this.cache.get(request);
-    if (cached) {
-      this.logger.info(`Cache hit for prompt: ${request.prompt.substring(0, 50)}...`);
-      this.telemetry.logCache(`Cache hit for ${providerId}:${request.model}`, true, { promptLength: request.prompt.length });
-      return cached;
-    }
-    
-    this.telemetry.logCache(`Cache miss for ${providerId}:${request.model}`, false, { promptLength: request.prompt.length });
-
-    try {
-      const requestManager = this.requestManagers.get(providerId);
-      if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
-
-      const response = await this.executeWithRetry(providerId, () => 
-        requestManager.enqueue(() => provider.generate(request), request.priority)
-      );
-      this.tracker.trackUsage(
-        providerId,
-        request.model,
-        response.usage.promptTokens,
-        response.usage.completionTokens,
-        request.agentId
-      );
-      this.telemetry.logRequest({
-        provider: providerId,
-        model: request.model,
-        agent: request.agentId,
-        tokens_in: response.usage.promptTokens,
-        tokens_out: response.usage.completionTokens,
-        latency: 0, // Need accurate latency calc
-        status: 200,
-        requestPayload: JSON.stringify({ prompt: request.prompt, systemPrompt: request.systemPrompt }),
-        responsePayload: JSON.stringify({ content: response.content })
-      });
-      this.cache.set(request, response);
-      return response;
-    } catch (error: any) {
-      if (error.name === 'AbortError' || error.message?.toLowerCase().includes('abort')) {
-        this.logger.info(`Request to ${providerId} was aborted by user.`);
-        throw error;
-      }
-      this.logger.error(`Provider ${providerId} failed: ${error.message}. Attempting failover chain...`);
-      this.telemetry.logError(`Provider ${providerId} failed`, error.name || 'APIError', { message: error.message });
-      return await this.handleFallback(request, [providerId], error);
-    }
+  private updateHealthOnSuccess(providerId: string, latency: number) {
+    const state = this.getState(providerId);
+    state.latency = Math.round((state.latency * 0.9) + (latency * 0.1)); // EMA
+    state.lastRequestTime = Date.now();
   }
 
-  async *stream(request: LLMRequest): AsyncGenerator<LLMStreamResponse> {
-    this.checkAgentBudget(request.agentId);
-    let { providerId, model: requestModel } = this.resolveTask(request);
-    request.model = requestModel;
-
-    if (this.isProviderCooling(providerId)) {
-      const fallback = this.getNextAvailableProvider(request, []);
-      if (fallback) {
-        providerId = fallback.providerId;
-        request.model = fallback.model;
-      }
-    }
-
-    const provider = this.providers.get(providerId);
-
-    if (!provider) {
-      throw new Error(`LLM Provider ${providerId} is not registered`);
-    }
-
-    try {
-      const requestManager = this.requestManagers.get(providerId);
-      if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
-
-      // For streaming, we only queue the initial request to get the generator
-      const generator = await requestManager.enqueue(() => provider.stream(request), request.priority);
-      let promptTokens = 0;
-      let completionTokens = 0;
-
-      for await (const chunk of generator) {
-        if (chunk.usage) {
-          promptTokens = chunk.usage.promptTokens || promptTokens;
-          completionTokens = chunk.usage.completionTokens || completionTokens;
-        }
-        yield chunk;
-      }
-
-      if (promptTokens > 0 || completionTokens > 0) {
-        this.tracker.trackUsage(providerId, request.model, promptTokens, completionTokens, request.agentId);
-      }
-      this.telemetry.logRequest({
-        provider: providerId,
-        model: request.model,
-        agent: request.agentId,
-        tokens_in: promptTokens,
-        tokens_out: completionTokens,
-        latency: 0,
-        status: 200,
-        requestPayload: JSON.stringify({ prompt: request.prompt, systemPrompt: request.systemPrompt }),
-        responsePayload: '[Streamed Response]' // Could buffer this if needed, but keeping it light for streams
-      });
-    } catch (error: any) {
-      if (error.name === 'AbortError' || error.message?.toLowerCase().includes('abort')) {
-        this.logger.info(`Stream to ${providerId} was aborted by user.`);
-        throw error;
-      }
-      this.logger.error(`Stream failed for ${providerId}: ${error.message}. Attempting failover chain...`);
-      this.telemetry.logError(`Stream failed for ${providerId}`, error.name || 'APIError', { message: error.message });
-      yield* this.handleFallbackStream(request, [providerId], error);
-    }
-  }
-
-  private resolveTask(request: LLMRequest): { providerId: LLMProviderId, model: string } {
-    // Advanced mode bypass (if user explicitly provided a model and we are not forcing auto)
-    // Wait, let's see. If the UI passes a model, how do we know if it's advanced mode?
-    // We can assume if request.model is set and we have a valid mapping, we MIGHT use it.
-    // But the intelligent router should override request.model unless we have a specific advanced flag.
-    // We will just let getBestModel decide.
-    const best = this.getBestModel(request);
-    if (best) return best;
-    
-    return { providerId: this.config.defaultProvider || 'ollama', model: request.model || 'llama3.2:latest' };
-  }
-
-  private async handleFallback(request: LLMRequest, failedProviders: string[], error: any): Promise<LLMResponse> {
-    const lastFailed = failedProviders[failedProviders.length - 1];
-    const state = this.getState(lastFailed);
-    
+  private updateHealthOnFailure(providerId: string, error: any) {
+    const state = this.getState(providerId);
     state.errorCount++;
+    state.totalErrors++;
     state.consecutiveFailures++;
+    state.lastRequestTime = Date.now();
 
-    if (state.circuitState === 'half-open') {
-      // Failed during half-open, trip immediately back to open
-      state.circuitState = 'open';
-      state.healthy = false;
-      state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
-      this.logger.warn(`Circuit Breaker TRIPPED for ${lastFailed} (half-open test failed)`);
-    } else if (state.consecutiveFailures >= this.CIRCUIT_BREAKER_TRIP_LIMIT) {
-      state.circuitState = 'open';
-      state.healthy = false;
-      state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
-      this.logger.warn(`Circuit Breaker TRIPPED for ${lastFailed} due to ${state.consecutiveFailures} consecutive failures`);
-    }
-
-    if (error.isRateLimit) {
+    // Check for specific error types
+    const msg = error.message?.toLowerCase() || '';
+    
+    if (error.isRateLimit || error.status === 429 || msg.includes('rate limit')) {
+      state.rateLimited = true;
       state.consecutive429Count++;
-    }
-    if (error.isQuota) {
+      
+      // Exponential cooldown: min(failures * 30s, 5min)
+      const cooldown = Math.min(state.consecutive429Count * 30 * 1000, 5 * 60 * 1000);
+      state.cooldownUntil = Date.now() + Math.max(cooldown, this.MIN_COOLDOWN_MS);
+      
+      if (state.consecutive429Count >= this.CIRCUIT_BREAKER_TRIP_LIMIT) {
+        state.circuitState = 'open';
+        state.healthy = false;
+        state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
+        this.logger.warn(`Circuit Breaker TRIPPED for ${providerId} due to rate limits`);
+      }
+    } else if (error.isQuota || error.status === 402 || msg.includes('quota') || msg.includes('insufficient_quota')) {
       state.quotaExhausted = true;
       state.healthy = false;
       state.circuitState = 'open';
       state.cooldownUntil = Date.now() + this.QUOTA_COOLING_MS;
-      this.telemetry.logCircuit(`Circuit Breaker TRIPPED for ${lastFailed}`, { reason: 'QuotaExhausted', cooldown: this.QUOTA_COOLING_MS });
+      this.telemetry.logCircuit(`Circuit Breaker TRIPPED for ${providerId}`, { reason: 'QuotaExhausted' });
+    } else {
+      // Generic failure
+      if (state.consecutiveFailures >= this.CIRCUIT_BREAKER_TRIP_LIMIT) {
+        state.circuitState = 'open';
+        state.healthy = false;
+        state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
+        this.logger.warn(`Circuit Breaker TRIPPED for ${providerId} due to ${state.consecutiveFailures} consecutive failures`);
+      }
     }
 
-    const fallback = this.getNextAvailableProvider(request, failedProviders);
+    // Half-open failure
+    if (state.circuitState === 'half-open') {
+      state.circuitState = 'open';
+      state.healthy = false;
+      state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
+      this.logger.warn(`Circuit Breaker TRIPPED for ${providerId} (half-open test failed)`);
+    }
+  }
+
+  private async handleFallback(
+    request: LLMRequest, 
+    failedProviders: string[], 
+    error: any,
+    originalDecision: RoutingDecision
+  ): Promise<LLMResponse> {
+    const lastFailed = failedProviders[failedProviders.length - 1];
+    this.updateHealthOnFailure(lastFailed, error);
+
+    const fallback = this.selectBestModel(request, failedProviders);
     if (!fallback) {
       throw new Error(`All LLM failover providers exhausted. Last error: ${error.message}`);
     }
-    const { providerId, model } = fallback;
+
+    const { providerId, model, decision } = fallback;
     const provider = this.providers.get(providerId);
     
     if (!provider) {
       failedProviders.push(providerId);
-      return this.handleFallback(request, failedProviders, new Error(`Fallback provider ${providerId} is not registered`));
+      return this.handleFallback(request, failedProviders, new Error(`Fallback provider ${providerId} not registered`), originalDecision);
     }
     
     this.logger.info(`Failing over from ${lastFailed} to ${providerId} (model: ${model})`);
@@ -495,72 +739,64 @@ export class LLMRouter {
       const requestManager = this.requestManagers.get(providerId);
       if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
 
+      const startTime = Date.now();
       const response = await this.executeWithRetry(providerId, () => 
         requestManager.enqueue(() => provider.generate(fallbackRequest), fallbackRequest.priority)
       );
-      this.tracker.trackUsage(providerId, fallbackRequest.model, response.usage.promptTokens, response.usage.completionTokens);
+      const latency = Date.now() - startTime;
+      this.updateHealthOnSuccess(providerId, latency);
+
+      this.tracker.trackUsage(providerId, fallbackRequest.model, response.usage.promptTokens, response.usage.completionTokens, fallbackRequest.agentId);
       this.telemetry.logRequest({
         provider: providerId,
         model: fallbackRequest.model,
         agent: fallbackRequest.agentId,
         tokens_in: response.usage.promptTokens,
         tokens_out: response.usage.completionTokens,
-        latency: 0,
+        latency,
         status: 200,
         requestPayload: JSON.stringify({ prompt: fallbackRequest.prompt, systemPrompt: fallbackRequest.systemPrompt }),
         responsePayload: JSON.stringify({ content: response.content })
       });
-      return response;
+      
+      // Merge decisions for explainability
+      const mergedDecision: RoutingDecision = {
+        ...decision,
+        fallbackReason: `Failed over from ${lastFailed}: ${error.message}`
+      };
+      this.recordRoutingDecision(mergedDecision);
+      
+      return { ...response, routingDecision: mergedDecision };
     } catch (fallbackError: any) {
       if (fallbackError.name === 'AbortError' || fallbackError.message?.toLowerCase().includes('abort')) {
         this.logger.info(`Fallback request to ${providerId} was aborted by user.`);
         throw fallbackError;
       }
       failedProviders.push(providerId);
-      return this.handleFallback(request, failedProviders, fallbackError);
+      return this.handleFallback(request, failedProviders, fallbackError, originalDecision);
     }
   }
 
-  private async *handleFallbackStream(request: LLMRequest, failedProviders: string[], error: any): AsyncGenerator<LLMStreamResponse> {
+  private async *handleFallbackStream(
+    request: LLMRequest, 
+    failedProviders: string[], 
+    error: any,
+    originalDecision: RoutingDecision
+  ): AsyncGenerator<LLMStreamResponse> {
     const lastFailed = failedProviders[failedProviders.length - 1];
-    const state = this.getState(lastFailed);
-    
-    state.errorCount++;
-    state.consecutiveFailures++;
+    this.updateHealthOnFailure(lastFailed, error);
 
-    if (state.circuitState === 'half-open') {
-      // Failed during half-open, trip immediately back to open
-      state.circuitState = 'open';
-      state.healthy = false;
-      state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
-      this.logger.warn(`Circuit Breaker TRIPPED for ${lastFailed} (half-open test failed)`);
-    } else if (state.consecutiveFailures >= this.CIRCUIT_BREAKER_TRIP_LIMIT) {
-      state.circuitState = 'open';
-      state.healthy = false;
-      state.cooldownUntil = Date.now() + this.RATE_LIMIT_COOLING_MS;
-      this.logger.warn(`Circuit Breaker TRIPPED for ${lastFailed} due to ${state.consecutiveFailures} consecutive failures`);
-    }
-
-    if (error.isRateLimit) {
-      state.consecutive429Count++;
-    }
-    if (error.isQuota) {
-      state.quotaExhausted = true;
-      state.healthy = false;
-      state.circuitState = 'open';
-      state.cooldownUntil = Date.now() + this.QUOTA_COOLING_MS;
-    }
-
-    const fallback = this.getNextAvailableProvider(request, failedProviders);
+    const fallback = this.selectBestModel(request, failedProviders);
     if (!fallback) {
       throw new Error(`All LLM failover providers exhausted. Last error: ${error.message}`);
     }
-    const { providerId, model } = fallback;
+
+    const { providerId, model, decision } = fallback;
     const provider = this.providers.get(providerId);
     
     if (!provider) {
       failedProviders.push(providerId);
-      yield* this.handleFallbackStream(request, failedProviders, new Error(`Fallback provider ${providerId} is not registered`));
+      yield* this.handleFallbackStream(request, failedProviders, new Error(`Fallback provider ${providerId} not registered`), originalDecision);
       return;
     }
     
@@ -571,6 +807,7 @@ export class LLMRouter {
       const requestManager = this.requestManagers.get(providerId);
       if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
 
+      const startTime = Date.now();
       const generator = await requestManager.enqueue(() => provider.stream(fallbackRequest), fallbackRequest.priority);
       let promptTokens = 0;
       let completionTokens = 0;
@@ -583,16 +820,33 @@ export class LLMRouter {
         yield chunk;
       }
 
+      const latency = Date.now() - startTime;
+      this.updateHealthOnSuccess(providerId, latency);
+
       if (promptTokens > 0 || completionTokens > 0) {
-        this.tracker.trackUsage(providerId, fallbackRequest.model, promptTokens, completionTokens);
+        this.tracker.trackUsage(providerId, fallbackRequest.model, promptTokens, completionTokens, fallbackRequest.agentId);
       }
+      
+      const mergedDecision: RoutingDecision = {
+        ...decision,
+        fallbackReason: `Failed over from ${lastFailed}: ${error.message}`
+      };
+      this.recordRoutingDecision(mergedDecision);
+      
     } catch (fallbackError: any) {
       if (fallbackError.name === 'AbortError' || fallbackError.message?.toLowerCase().includes('abort')) {
         this.logger.info(`Fallback stream to ${providerId} was aborted by user.`);
         throw fallbackError;
       }
       failedProviders.push(providerId);
-      yield* this.handleFallbackStream(request, failedProviders, fallbackError);
+      yield* this.handleFallbackStream(request, failedProviders, fallbackError, originalDecision);
+    }
+  }
+
+  private recordRoutingDecision(decision: RoutingDecision) {
+    this.routingHistory.unshift(decision);
+    if (this.routingHistory.length > this.MAX_HISTORY) {
+      this.routingHistory.pop();
     }
   }
 
@@ -606,5 +860,119 @@ export class LLMRouter {
       }
     }
     return health;
+  }
+
+  // ============ Diagnostics API ============
+
+  public getDiagnostics() {
+    const states = this.getProviderStates();
+    const healthMap: Record<string, ProviderHealthState> = {};
+    
+    for (const [id, state] of Object.entries(states)) {
+      healthMap[id] = {
+        healthy: state.healthy,
+        avgLatency: state.latency,
+        successRate: state.totalRequests > 0 ? state.successCount / state.totalRequests : 1,
+        consecutiveFailures: state.consecutiveFailures,
+        cooldownUntil: state.cooldownUntil,
+        lastFailure: state.lastRequestTime,
+        totalRequests: state.totalRequests,
+        totalErrors: state.totalErrors
+      };
+    }
+
+    const availableModels = this.registry.getAllCapabilities().map(c => ({
+      provider: c.providerId,
+      model: c.modelId,
+      isLocal: c.isLocal,
+      capabilities: {
+        coding: c.coding,
+        reasoning: c.reasoning,
+        speed: c.speed,
+        cost: c.cost,
+        vision: c.vision,
+        contextWindow: c.contextWindow,
+        toolCalling: c.toolCalling
+      },
+      health: healthMap[c.providerId] || { healthy: true, avgLatency: 0, successRate: 1 }
+    }));
+
+    return {
+      providerHealth: healthMap,
+      availableModels,
+      routingHistory: this.routingHistory.slice(0, 20),
+      cooldowns: this.getActiveCooldowns(),
+      config: {
+        cloudMode: this.config.cloudMode,
+        routingProfile: this.config.routingProfile,
+        routingMode: this.config.routingMode,
+        defaultProvider: this.config.defaultProvider
+      },
+      localModels: this.registry.getLocalModels()
+    };
+  }
+
+  private getActiveCooldowns() {
+    const cooldowns: Record<string, { until: number; reason: string }> = {};
+    const now = Date.now();
+    
+    for (const [id, state] of this.providerStates.entries()) {
+      if (state.cooldownUntil && state.cooldownUntil > now) {
+        let reason = 'Circuit breaker';
+        if (state.rateLimited) reason = 'Rate limited';
+        else if (state.quotaExhausted) reason = 'Quota exhausted';
+        else if (state.consecutiveFailures > 0) reason = `${state.consecutiveFailures} consecutive failures`;
+        
+        cooldowns[id] = {
+          until: state.cooldownUntil,
+          reason
+        };
+      }
+    }
+    return cooldowns;
+  }
+
+  // Manual overrides for development/testing
+  public forceProvider(providerId: LLMProviderId, model?: string) {
+    this.config.routingMode = 'advanced';
+    // This would be used via request.forceProvider
+  }
+
+  public disableProvider(providerId: LLMProviderId) {
+    if (!this.config.userPreferences) this.config.userPreferences = {};
+    if (!this.config.userPreferences.disabledProviders) this.config.userPreferences.disabledProviders = [];
+    if (!this.config.userPreferences.disabledProviders.includes(providerId)) {
+      this.config.userPreferences.disabledProviders.push(providerId);
+    }
+  }
+
+  public enableProvider(providerId: LLMProviderId) {
+    if (this.config.userPreferences?.disabledProviders) {
+      this.config.userPreferences.disabledProviders = this.config.userPreferences.disabledProviders.filter(p => p !== providerId);
+    }
+  }
+
+  public disableModel(modelId: string) {
+    if (!this.config.userPreferences) this.config.userPreferences = {};
+    if (!this.config.userPreferences.disabledModels) this.config.userPreferences.disabledModels = [];
+    if (!this.config.userPreferences.disabledModels.includes(modelId)) {
+      this.config.userPreferences.disabledModels.push(modelId);
+    }
+  }
+
+  public setRoutingProfile(profile: RoutingProfile) {
+    this.config.routingProfile = profile;
+  }
+
+  public setCloudMode(mode: CloudMode) {
+    this.config.cloudMode = mode;
+  }
+
+  public setRoutingMode(mode: RoutingMode) {
+    this.config.routingMode = mode;
+  }
+
+  public setUserPreferences(prefs: Partial<UserPreferences>) {
+    this.config.userPreferences = { ...this.config.userPreferences, ...prefs };
   }
 }
