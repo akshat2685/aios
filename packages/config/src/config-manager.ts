@@ -249,6 +249,10 @@ const DEFAULT_CONFIG: Config = {
 };
 
 export class ConfigManager {
+  static getAll(): Config {
+    return configManager.getAll();
+  }
+
   static get(key: string, defaultValue?: any): any {
     return configManager.get(key, defaultValue);
   }

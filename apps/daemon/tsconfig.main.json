@@ -21,7 +21,8 @@
       "@aios/automation": ["../../packages/automation/dist"],
       "@aios/plugins": ["../../packages/plugins/dist"],
       "@aios/security": ["../../packages/security/dist"],
-      "@aios/ui": ["../../packages/ui/dist"]
+      "@aios/ui": ["../../packages/ui/dist"],
+      "@aios/graph": ["../../packages/graph/dist"]
     }
   },
   "include": [

@@ -1,0 +1,24 @@
+{
+  "name": "@aios/graph-viz",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Interactive Knowledge Graph Visualization for AIOS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@aios/core": "*",
+    "@aios/types": "*",
+    "@aios/knowledge": "*",
+    "@aios/storage": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "rimraf": "^5.0.0"
+  }
+}

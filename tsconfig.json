@@ -34,6 +34,11 @@
     { "path": "./packages/ui" },
     { "path": "./packages/graph" },
     { "path": "./packages/computer" },
+    { "path": "./packages/graph-viz" },
+    { "path": "./packages/digital-twin" },
+    { "path": "./packages/sandbox" },
+    { "path": "./packages/federation" },
+    { "path": "./packages/offline-ai" },
     { "path": "./apps/daemon/tsconfig.main.json" },
     { "path": "./apps/daemon/tsconfig.renderer.json" }
   ]

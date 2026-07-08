@@ -1,8 +1,8 @@
 import { AgentTool } from '@aios/types';
 
-import { SkillManager } from '../skill-manager';
+import { SkillRegistry } from '../skill-registry';
 
-export function getSkillReadTool(skillManager: SkillManager): AgentTool {
+export function getSkillReadTool(skillManager: SkillRegistry): AgentTool {
   return {
     name: 'skill:read',
     description: 'Read the instructions and documentation for an installed agent skill.',

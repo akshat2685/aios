@@ -11,7 +11,7 @@ export interface AgentSkill {
   instructions?: string;
 }
 
-export class SkillManager {
+export class SkillRegistry {
   private skills: Map<string, AgentSkill> = new Map();
   private logger: CoreLogger;
   private workspacePath: string;

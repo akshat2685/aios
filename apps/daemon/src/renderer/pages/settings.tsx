@@ -319,6 +319,92 @@ export default function SettingsPage() {
                 </div>
               </motion.div>
 
+              {/* Routing Strategy */}
+              <motion.div variants={itemVariants}>
+                <h2 className="text-base font-semibold mb-3">Routing Strategy</h2>
+                <div className="glass p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-foreground">Routing Profile</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">How the router prioritizes models</p>
+                    </div>
+                    <select
+                      value={config.llm.routingProfile}
+                      onChange={(e) => updateConfig('llm.routingProfile', e.target.value)}
+                      className="w-48 px-3 py-1.5 rounded-lg bg-glass-strong border border-glass-border text-sm text-foreground outline-none focus:border-accent transition-colors no-drag"
+                    >
+                      <option value="BALANCED">Balanced (Default)</option>
+                      <option value="FASTEST">Fastest</option>
+                      <option value="CHEAPEST">Cheapest</option>
+                      <option value="HIGHEST_QUALITY">Highest Quality</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-foreground">Cloud Mode</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Local models only or allow cloud providers</p>
+                    </div>
+                    <select
+                      value={config.llm.cloudMode}
+                      onChange={(e) => updateConfig('llm.cloudMode', e.target.value)}
+                      className="w-48 px-3 py-1.5 rounded-lg bg-glass-strong border border-glass-border text-sm text-foreground outline-none focus:border-accent transition-colors no-drag"
+                    >
+                      <option value="online">Online (All Providers)</option>
+                      <option value="local">Local Only (Ollama)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-medium text-foreground">Advanced Mode</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">Show manual model/provider selection in chat</p>
+                    </div>
+                    <select
+                      value={config.llm.routingMode}
+                      onChange={(e) => updateConfig('llm.routingMode', e.target.value)}
+                      className="w-48 px-3 py-1.5 rounded-lg bg-glass-strong border border-glass-border text-sm text-foreground outline-none focus:border-accent transition-colors no-drag"
+                    >
+                      <option value="automatic">Automatic (Hidden)</option>
+                      <option value="advanced">Advanced (Show Selector)</option>
+                    </select>
+                  </div>
+
+                  <div className="border-t border-glass-border pt-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3">User Preferences</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.llm.userPreferences.preferLocal}
+                          onChange={(e) => updateConfig('llm.userPreferences.preferLocal', e.target.checked)}
+                          className="w-4 h-4 rounded border-glass-border bg-glass-strong text-accent focus:ring-accent"
+                        />
+                        <span className="text-foreground">Prefer Local Models</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.llm.userPreferences.preferOpenSource}
+                          onChange={(e) => updateConfig('llm.userPreferences.preferOpenSource', e.target.checked)}
+                          className="w-4 h-4 rounded border-glass-border bg-glass-strong text-accent focus:ring-accent"
+                        />
+                        <span className="text-foreground">Prefer Open Source</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={config.llm.userPreferences.preferCheapest}
+                          onChange={(e) => updateConfig('llm.userPreferences.preferCheapest', e.target.checked)}
+                          className="w-4 h-4 rounded border-glass-border bg-glass-strong text-accent focus:ring-accent"
+                        />
+                        <span className="text-foreground">Prefer Cheapest</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+
               <motion.div variants={itemVariants}>
                 <h2 className="text-base font-semibold mb-3">API Key & Provider Dashboard</h2>
                 <div className="space-y-4">

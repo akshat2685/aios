@@ -5,7 +5,7 @@ import { AssistantAgent, CoderAgent, ResearchAgent, PlannerAgent } from './core-
 import { AgentMessage, AgentResponse } from '@aios/types';
 
 import { getDelegationTool } from './tools/delegation-tool';
-import { SkillManager } from './skill-manager';
+import { SkillRegistry } from './skill-registry';
 import { getSkillReadTool } from './tools/skill-tools';
 import { loadPlans, savePlans } from './tools/planner-tools';
 import { MemoryService } from '@aios/core';
@@ -14,7 +14,7 @@ import { GuardRail, askApproval } from '@aios/security';
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent> = new Map();
   private logger: CoreLogger;
-  public skillManager: SkillManager;
+  public skillRegistry: SkillRegistry;
   private memory?: MemoryService;
 
   constructor(
@@ -26,7 +26,7 @@ export class AgentOrchestrator {
   ) {
     this.logger = logger;
     this.memory = memory;
-    this.skillManager = new SkillManager(logger, workspacePath);
+    this.skillRegistry = new SkillRegistry(logger, workspacePath);
     
     // Setup Security Guardrail
     const policy = {
@@ -63,23 +63,27 @@ export class AgentOrchestrator {
       let taskRef: any = null;
       let planRef: any = null;
       let plans: any[] = [];
+      let planContext = '';
       
-      if (planId && taskId) {
+      if (planId) {
         plans = await loadPlans();
         planRef = plans.find(p => p.id === planId);
         if (planRef) {
-          taskRef = planRef.tasks.find((t: any) => t.id === taskId);
-          if (taskRef) {
-            taskRef.status = 'in_progress';
-            taskRef.assignedAgent = agentId;
-            await savePlans(plans);
+          planContext = `[PLAN CONTEXT]\nGoal: ${planRef.goal}\nTasks:\n${planRef.tasks.map((t: any) => `- [${t.id}] ${t.title} (${t.status}): ${t.description || ''}`).join('\n')}\n`;
+          if (taskId) {
+            taskRef = planRef.tasks.find((t: any) => t.id === taskId);
+            if (taskRef) {
+              taskRef.status = 'in_progress';
+              taskRef.assignedAgent = agentId;
+              await savePlans(plans);
+            }
           }
         }
       }
 
       // Context override injection
       const contextPrefix = (planId && taskId) 
-        ? `[DELEGATION CONTEXT]\nYou have been delegated a sub-task for Plan ${planId} (Task ID: ${taskId}).\n`
+        ? `${planContext}\n[DELEGATION CONTEXT]\nYou have been delegated a sub-task for Plan ${planId} (Task ID: ${taskId}).\n`
         : '';
 
       const response = await this.routeRequest(agentId, {
@@ -104,16 +108,16 @@ export class AgentOrchestrator {
   }
 
   public async init(): Promise<void> {
-    await this.skillManager.discoverSkills();
-    const skills = this.skillManager.getSkills();
+    await this.skillRegistry.discoverSkills();
+    const skills = this.skillRegistry.getSkills();
     
     let skillsContext = '';
     if (skills.length > 0) {
       skillsContext = 'You have the following skills available. Use the skill:read tool to read their instructions when you need to perform a task matching their description:\n';
-      skillsContext += skills.map(s => `- ${s.name}: ${s.description}`).join('\n');
+      skillsContext += skills.map((s: any) => `- ${s.name}: ${s.description}`).join('\n');
     }
 
-    const skillReadTool = getSkillReadTool(this.skillManager);
+    const skillReadTool = getSkillReadTool(this.skillRegistry);
 
     for (const agent of this.agents.values()) {
       if (skillsContext) {

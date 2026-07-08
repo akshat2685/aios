@@ -189,12 +189,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const systemPrompt = agentSystemPrompts[conversation.agentId] || '';
 
-      // Call streaming IPC endpoint
-      await api.llm.stream({
-        prompt: content,
-        model: conversation.model || state.selectedModel,
-        systemPrompt,
+      // Prepare history to send to the backend
+      const historyToSend = conversation.messages
+        .filter(m => !m.isStreaming)
+        .map(m => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp
+        }));
+
+      // Call streaming IPC endpoint via agent orchestrator
+      await api.agent.chatStream({
+        message: content,
+        agentId: conversation.agentId,
         conversationId: conversationId!,
+        history: historyToSend
       });
     } catch (error: any) {
       // Update with error message

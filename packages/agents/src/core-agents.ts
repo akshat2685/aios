@@ -4,6 +4,7 @@ import { CoreLogger } from '@aios/core';
 import { getCodingTools } from './tools/coding-tools';
 import { getResearchTools } from './tools/research-tools';
 import { getComputerTools } from './tools/computer-tools';
+import { getPlannerTools } from './tools/planner-tools';
 
 export class AssistantAgent extends BaseAgent {
   constructor(router: LLMRouter, logger: CoreLogger) {
@@ -44,7 +45,8 @@ export class CoderAgent extends BaseAgent {
     Your goal is to write production-grade, modular, and strongly typed code.
     Follow SOLID principles and Clean Architecture. Always consider performance and security.
     You have direct access to tools for interacting with files and running shell commands in the workspace.
-    Use your tools to read code, write new features, analyze errors, and run tests/builds to verify your work.`;
+    CRITICAL: You MUST use your tools to actually read code, write new features, analyze errors, and run tests.
+    Do NOT just output the code in chat or describe what you would do. ACTUALLY EXECUTE IT using the tools provided.`;
   }
 }
 
@@ -66,8 +68,6 @@ export class ResearchAgent extends BaseAgent {
   }
 }
 
-import { getPlannerTools } from './tools/planner-tools';
-
 export class PlannerAgent extends BaseAgent {
   constructor(router: LLMRouter, logger: CoreLogger) {
     super('Planner', 'Project Planner', router, logger);
@@ -83,6 +83,44 @@ export class PlannerAgent extends BaseAgent {
     return `You are the AIOS Planner Agent. You break down complex goals into 
     actionable tasks, create roadmaps, and manage dependencies. 
     Use your tools to create plans, decompose goals, and track task statuses.
-    Focus on efficiency and risk mitigation.`;
+    CRITICAL: You MUST use the 'plan:create' and other plan tools to construct a formal plan.
+    Once a plan is ready, use the 'agent:delegate' tool to assign tasks to the appropriate agents (e.g., Coder, Researcher).`;
+  }
+}
+
+export class ReviewerAgent extends BaseAgent {
+  constructor(router: LLMRouter, logger: CoreLogger) {
+    super('Reviewer', 'Code Reviewer', router, logger);
+  }
+
+  protected getSystemPrompt(): string {
+    return `You are the AIOS Reviewer Agent. Your responsibility is to analyze code changes
+    produced by the Coder Agent and ensure they meet our quality standards. Look for security 
+    vulnerabilities, performance bottlenecks, and adherence to SOLID principles.
+    Do not write the code yourself, but provide actionable feedback.`;
+  }
+}
+
+export class TesterAgent extends BaseAgent {
+  constructor(router: LLMRouter, logger: CoreLogger) {
+    super('Tester', 'QA Engineer', router, logger);
+  }
+
+  protected getSystemPrompt(): string {
+    return `You are the AIOS Tester Agent. You write unit, integration, and end-to-end tests 
+    for newly developed features. You also execute test suites to verify that the Coder Agent's
+    changes did not introduce regressions.`;
+  }
+}
+
+export class SummarizerAgent extends BaseAgent {
+  constructor(router: LLMRouter, logger: CoreLogger) {
+    super('Summarizer', 'Information Summarizer', router, logger);
+  }
+
+  protected getSystemPrompt(): string {
+    return `You are the AIOS Summarizer Agent. Your job is to take large amounts of text, 
+    logs, or research data and condense it into highly actionable, easy-to-read executive summaries.
+    Focus on the key takeaways and omit unnecessary noise.`;
   }
 }

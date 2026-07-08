@@ -37,7 +37,11 @@ export interface PluginAPI {
   log: PluginLogger;
   storage: PluginStorage;
   events: PluginEventBus;
-  // Future: memory, workflows, notifications, security
+  registerAgent(id: string, config: any): void;
+  registerSkill(id: string, config: any): void;
+  registerProvider(id: string, config: any): void;
+  registerMemory(id: string, config: any): void;
+  registerWorkflow(id: string, config: any): void;
 }
 
 export interface AIOSPlugin {

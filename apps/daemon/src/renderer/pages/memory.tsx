@@ -17,9 +17,11 @@ const CATEGORIES = [
 
 export default function MemoryPage() {
   const api = getElectronAPI();
+  const { memoryStatus } = useAppStore();
   const [activeTab, setActiveTab] = useState('preference');
   const [query, setQuery] = useState('');
   const [memories, setMemories] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [newContent, setNewContent] = useState('');
   const [newKey, setNewKey] = useState('');
@@ -35,6 +37,7 @@ export default function MemoryPage() {
 
   useEffect(() => {
     fetchMemories();
+    api.memory.stats().then(setStats);
   }, [activeTab, query]);
 
   const handleAdd = async () => {
@@ -70,10 +73,27 @@ export default function MemoryPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Long-Term Memory</h1>
-          <p className="text-muted-foreground text-sm">Semantic context available to AIOS agents</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-muted-foreground text-sm">Semantic context available to AIOS agents</p>
+            {stats && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-glass-subtle border border-glass-border font-mono text-muted-foreground">
+                {stats.points} points
+              </span>
+            )}
+          </div>
         </div>
       </div>
       
+      {memoryStatus === 'offline' && (
+        <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/20 text-danger flex items-center gap-3">
+          <BrainCircuit size={20} />
+          <div>
+            <div className="font-semibold text-sm">Memory Engine Offline</div>
+            <div className="text-xs opacity-80">Qdrant is unreachable. Please ensure it is running via Docker (port 6333). Agents will operate without long-term memory.</div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex overflow-hidden gap-6">
         {/* Categories Sidebar */}
         <div className="w-64 flex flex-col gap-2">

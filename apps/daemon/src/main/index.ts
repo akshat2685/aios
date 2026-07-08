@@ -71,7 +71,7 @@ async function createApplication() {
       }
     },
     localModels: allConfig.llm.localModels,
-    userPreferences: allConfig.llm.userPreferences,
+    userPreferences: allConfig.llm.userPreferences as any,
     agentBudgets: allConfig.agents?.modelOverrides ? Object.fromEntries(
       Object.entries(allConfig.agents.modelOverrides).map(([k, v]: [string, any]) => [k, { maxTokens: 100000 }])
     ) : undefined,

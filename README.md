@@ -59,6 +59,13 @@ It belongs entirely to the user and runs local models offline while supporting r
 - **`agent-reach` Integration**: Fully integrated the `agent-reach` CLI tool (giving access to YouTube, Reddit, Twitter, and 12 other platforms) to the TS `ResearchAgent` and all 7 Python ADK agents (`planner`, `research`, `coding`, `website`, `testing`, `security`, `docs`) via a native `run_agent_reach_command` tool.
 - **Background Auto-Start**: Installed a hidden VBScript runner in the Windows Startup folder to launch AIOS on boot, and placed a desktop shortcut pointing to it.
 
+### 9. Future Vision (Phase 10)
+- **Knowledge Graph Visualization**: Interactive "Brain Map" UI that renders all nodes (memories, chats, projects, files) and edges in a force-directed graph with zoom, filter, and search. Powered by `@aios/graph-viz` layout engine and query engine.
+- **Digital Twin**: Persistent user model (`@aios/digital-twin`) that passively learns coding style, tone preferences, and long-term objectives from conversations and code diffs. Generates personalized context for agent system prompts.
+- **Simulation Sandbox**: Safe isolated environment (`@aios/sandbox`) where agents can dry-run plans, write scratch code, and test workflows in a virtual filesystem before executing on the real system. Includes diff preview and "Promote to Real" flow.
+- **Federated Multi-Agent Network**: WebSocket-based peer-to-peer protocol (`@aios/federation`) allowing local AIOS instances to securely collaborate — delegate tasks to remote agents, sync knowledge graphs via CRDTs, and share model capabilities. All traffic encrypted with AES-256-GCM.
+- **Offline Personal Intelligence**: Fully local AI stack (`@aios/offline-ai`) consolidating local embeddings (all-MiniLM-L6-v2), Whisper speech-to-text, Piper TTS, Tesseract OCR, and Moondream vision — all runnable air-gapped with zero network access.
+
 
 ---
 
@@ -75,9 +82,14 @@ AIOS/
 │   ├── connectors/           # Folder watching connectors
 │   ├── core/                 # Core logs and MemoryService
 │   ├── devtools/             # Git and Workspace Tree Intelligence
+│   ├── digital-twin/         # Digital Twin — User Model (Phase 10)
+│   ├── federation/           # Federated Multi-Agent Network (Phase 10)
+│   ├── graph-viz/            # Knowledge Graph Visualization (Phase 10)
 │   ├── llm/                  # Providers and Router pipeline
 │   ├── memory/               # Qdrant client and chunking
+│   ├── offline-ai/           # Offline Intelligence — STT/TTS/OCR/Vision (Phase 10)
 │   ├── plugins/              # Dynamic plugin loader
+│   ├── sandbox/              # Simulation Sandbox (Phase 10)
 │   ├── security/             # GuardRail approval loops
 │   ├── types/                # Core system TS types
 │   ├── ui/                   # Shared UI definitions

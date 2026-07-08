@@ -104,7 +104,27 @@ export class PluginManager {
       emit: (event, ...args) => this.globalEventBus.emit(event, ...args)
     };
 
-    return { log, storage, events };
+    return { 
+      log, 
+      storage, 
+      events,
+      registerAgent: (id: string, config: any) => {
+        this.logger.info(`Plugin ${pluginId} registered agent: ${id}`);
+        // In reality, this would hook into AgentRegistry
+      },
+      registerSkill: (id: string, config: any) => {
+        this.logger.info(`Plugin ${pluginId} registered skill: ${id}`);
+      },
+      registerProvider: (id: string, config: any) => {
+        this.logger.info(`Plugin ${pluginId} registered provider: ${id}`);
+      },
+      registerMemory: (id: string, config: any) => {
+        this.logger.info(`Plugin ${pluginId} registered memory: ${id}`);
+      },
+      registerWorkflow: (id: string, config: any) => {
+        this.logger.info(`Plugin ${pluginId} registered workflow: ${id}`);
+      }
+    };
   }
 
   async scanAndLoadPlugins() {

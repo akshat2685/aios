@@ -130,16 +130,26 @@ export default function PluginsPage() {
           </div>
         </Tabs.Content>
         
-        <Tabs.Content value="marketplace" className="flex-1 flex items-center justify-center text-muted-foreground">
-          Marketplace connection not configured.
+        <Tabs.Content value="marketplace" className="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <DownloadCloud size={48} className="text-accent/20 mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Plugin Marketplace</h2>
+          <p className="text-muted-foreground max-w-md mb-6">
+            We're building a centralized registry for community-created agents, tools, and extensions.
+          </p>
+          <div className="px-4 py-2 bg-glass-subtle border border-glass-border rounded-full text-xs font-mono text-muted-foreground uppercase tracking-wider">
+            Coming Soon
+          </div>
         </Tabs.Content>
 
-        <Tabs.Content value="developer" className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-4">
-          <Code2 size={48} className="opacity-20" />
-          <p>Load unpacked plugins from local directories to test your extensions.</p>
-          <button className="px-4 py-2 border border-glass-border rounded-lg hover:bg-glass-hover transition-colors">
-            Load Unpacked Plugin...
-          </button>
+        <Tabs.Content value="developer" className="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <Code2 size={48} className="text-secondary/20 mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Developer Mode</h2>
+          <p className="text-muted-foreground max-w-md mb-6">
+            The local plugin development toolkit is currently in beta. You will soon be able to load unpacked extensions directly from your filesystem.
+          </p>
+          <div className="px-4 py-2 bg-glass-subtle border border-glass-border rounded-full text-xs font-mono text-muted-foreground uppercase tracking-wider">
+            Coming Soon
+          </div>
         </Tabs.Content>
       </Tabs.Root>
     </motion.div>

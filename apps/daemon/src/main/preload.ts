@@ -28,6 +28,7 @@ const validChannels = [
   'graph:updateTaskStatus',
   'graph:deleteTask',
   'agent:chat',
+  'agent:chat-stream',
   'agent:launch',
   'agent-launcher:toggle',
   'research:conduct',
@@ -46,6 +47,18 @@ const validChannels = [
   'llm:cache:stats',
   'llm:tracker:stats',
   'llm:states',
+  'llm:diagnostics',
+  'llm:config:get',
+  'llm:config:set',
+  'llm:disable-provider',
+  'llm:enable-provider',
+  'llm:disable-model',
+  'llm:set-routing-profile',
+  'llm:set-cloud-mode',
+  'llm:set-routing-mode',
+  'llm:set-user-preferences',
+  'llm:discover-models',
+  'llm:local-models',
   'security:get-rules',
   'security:delete-rule',
   'security:get-audit-logs',
@@ -99,6 +112,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   agent: {
     chat: (message: string, agentId?: string) => ipcRenderer.invoke('agent:chat', { message, agentId }),
+    chatStream: (params: { message: string; agentId?: string; conversationId: string; history?: any[] }) => ipcRenderer.invoke('agent:chat-stream', params),
     listAdkAgents: () => ipcRenderer.invoke('adk:list-agents'),
     launch: (agentId: string) => ipcRenderer.invoke('agent:launch', { agentId }),
   },
@@ -220,6 +234,7 @@ declare global {
       };
       agent: {
         chat: (message: string, agentId?: string) => Promise<any>;
+        chatStream: (params: { message: string; agentId?: string; conversationId: string; history?: any[] }) => Promise<void>;
         listAdkAgents: () => Promise<{ agents: Array<{ name: string; description: string; capabilities: string[]; icon: string }> }>;
         launch: (agentId: string) => Promise<{ status: string; agentId: string }>;
       };

@@ -1,5 +1,6 @@
 import { LLMRouter } from '@aios/llm';
 import { CoreLogger } from '@aios/core';
+import { TaskType } from '@aios/types';
 import { AgentTool, AgentState, AgentMessage, AgentResponse } from '@aios/types';
 import { ConfigManager } from '@aios/config';
 
@@ -35,7 +36,6 @@ export abstract class BaseAgent {
     let overrideModel = overrides[agentKey]?.model;
     
     // Map agent to TaskType
-    import { TaskType } from '@aios/types';
     let agentTask: TaskType = 'GENERAL_CHAT';
     if (agentKey === 'coder') agentTask = 'CODING';
     if (agentKey === 'planner' || agentKey === 'researcher') agentTask = 'REASONING';
@@ -54,6 +54,7 @@ export abstract class BaseAgent {
 }
 </tool_call>
 
+CRITICAL: You MUST use your tools to actually perform actions (like writing code, reading files, creating plans). Do NOT just describe what you would do.
 Only call ONE tool at a time. After calling a tool, wait for the <tool_response> before continuing.
 Explain your reasoning in a "Thought:" section before writing the tool call.
 When you are done and have the final answer, respond directly to the user without calling any tools.`;
@@ -64,7 +65,7 @@ When you are done and have the final answer, respond directly to the user withou
     // Copy conversation history
     const conversationHistory = [...history, message];
     let step = 0;
-    const maxSteps = 5;
+    const maxSteps = 10;
     let finalResponse = '';
 
     try {

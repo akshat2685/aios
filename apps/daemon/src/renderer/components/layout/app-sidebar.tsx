@@ -2,7 +2,8 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, MessageSquare, FlaskConical, Zap, Settings,
-  PanelLeftClose, PanelLeft, Database, FolderGit, ActivitySquare
+  PanelLeftClose, PanelLeft, Database, FolderGit, ActivitySquare,
+  Brain, User, Globe, Cpu,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app-store';
@@ -16,6 +17,12 @@ const navItems = [
   { id: 'security', path: '/security', label: 'Security', icon: ActivitySquare },
   { id: 'diagnostics', path: '/diagnostics', label: 'Diagnostics', icon: ActivitySquare },
   { id: 'activity', path: '/activity', label: 'Activity Monitor', icon: ActivitySquare },
+  // ─── Phase 10: Future Vision ────
+  { id: 'brain-map', path: '/brain-map', label: 'Brain Map', icon: Brain },
+  { id: 'digital-twin', path: '/digital-twin', label: 'Digital Twin', icon: User },
+  { id: 'sandbox', path: '/sandbox', label: 'Sandbox', icon: FlaskConical },
+  { id: 'federation', path: '/federation', label: 'Federation', icon: Globe },
+  { id: 'offline-ai', path: '/offline-ai', label: 'Offline AI', icon: Cpu },
 ];
 
 const bottomItems = [

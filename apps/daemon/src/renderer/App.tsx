@@ -25,6 +25,11 @@ import DiagnosticsPage from '@/pages/diagnostics';
 import SecurityPage from '@/pages/security';
 import PluginsPage from '@/pages/plugins';
 import ActivityMonitorPage from '@/pages/activity';
+import BrainMapPage from '@/pages/brain-map';
+import TwinPage from '@/pages/twin-page';
+import SandboxPage from '@/pages/sandbox-page';
+import FederationPage from '@/pages/federation-page';
+import OfflinePage from '@/pages/offline-page';
 
 function AppLayout() {
   const location = useLocation();
@@ -71,6 +76,11 @@ function AppLayout() {
               <Route path="/diagnostics" element={<DiagnosticsPage />} />
               <Route path="/activity" element={<ActivityMonitorPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/brain-map" element={<BrainMapPage />} />
+              <Route path="/digital-twin" element={<TwinPage />} />
+              <Route path="/sandbox" element={<SandboxPage />} />
+              <Route path="/federation" element={<FederationPage />} />
+              <Route path="/offline-ai" element={<OfflinePage />} />
             </Routes>
           </AnimatePresence>
         </main>

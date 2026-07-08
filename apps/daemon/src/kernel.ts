@@ -55,7 +55,7 @@ export class AIOSKernel {
     this.router = new LLMRouter(config, this.security, logger);
     this.memory = new MemoryService();
     this.graph = new GraphService(logger);
-    this.graph.init().catch(e => logger.error(`Failed to initialize Graph Schema: ${e}`));
+    this.graph.init().catch((e: any) => logger.error(`Failed to initialize Graph Schema: ${e}`));
 
     this.agents = new AgentOrchestrator(
       this.router, 

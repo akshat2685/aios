@@ -107,47 +107,11 @@ export default function AutomationPage() {
           </div>
           <div className="flex-1 p-8 flex flex-col items-center justify-center relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-glass-hover to-transparent">
             
-            {/* Mock Visual Node Builder Layout */}
-            <div className="flex flex-col items-center gap-6 w-full max-w-md">
-              <div className="w-full p-4 glass-strong border border-glass-border rounded-xl flex items-center gap-4 shadow-xl">
-                <div className="w-10 h-10 rounded-lg bg-secondary/20 text-secondary flex items-center justify-center">
-                  <Clock size={20} />
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Cron Trigger</div>
-                  <div className="text-xs text-muted-foreground">Runs every 1 hour</div>
-                </div>
-              </div>
-              
-              <div className="h-6 border-l-2 border-dashed border-glass-border" />
-              
-              <div className="w-full p-4 glass-strong border border-accent/30 rounded-xl flex items-center gap-4 shadow-xl shadow-accent/10 relative overflow-hidden">
-                <div className="absolute inset-0 bg-accent/5 animate-pulse-glow" />
-                <div className="w-10 h-10 rounded-lg bg-accent/20 text-accent flex items-center justify-center z-10">
-                  <Zap size={20} />
-                </div>
-                <div className="z-10">
-                  <div className="text-sm font-medium text-accent">Workflow Execution</div>
-                  <div className="text-xs text-muted-foreground">State: Extracting Data...</div>
-                </div>
-              </div>
-              
-              <div className="h-6 border-l-2 border-dashed border-glass-border" />
-
-              <div className="w-full p-4 glass-strong border border-glass-border rounded-xl flex flex-col gap-2 shadow-xl opacity-60">
-                <div className="flex items-center gap-2 text-sm text-success">
-                  <CheckCircle2 size={16} /> <span>Fetch Data</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-success">
-                  <CheckCircle2 size={16} /> <span>Parse PDF</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-warning animate-pulse">
-                  <div className="w-1.5 h-1.5 rounded-full bg-warning mx-[5px]" /> <span>Generate Summary</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className="w-1.5 h-1.5 rounded-full bg-glass-border mx-[5px]" /> <span>Email User</span>
-                </div>
-              </div>
+            {/* Real visualization will go here */}
+            <div className="flex flex-col items-center gap-6 w-full max-w-md opacity-50 text-center">
+              <Zap size={48} className="text-muted-foreground mb-4" />
+              <div className="text-lg font-medium text-muted-foreground">No Workflow Selected</div>
+              <div className="text-sm text-muted-foreground">Select a workflow from the sidebar to view its execution graph.</div>
             </div>
 
           </div>

@@ -169,6 +169,51 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     }
   });
 
+  ipcMain.handle('agent:chat-stream', async (event, { message, agentId, conversationId, history = [] }) => {
+    try {
+      logger.info(`Routing chat stream to agent ${agentId || 'assistant'} for conversation ${conversationId}`);
+      
+      // We pass the incoming history (from the UI) so the agent has full context
+      const mappedHistory = history.map((m: any) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp || Date.now()
+      }));
+
+      // In the background, run the full agent reasoning + tool loop
+      // We don't stream intermediate tool outputs to UI yet, but we will send the final answer via IPC events.
+      // A more advanced implementation could stream thoughts/tool calls!
+      kernel.agents.routeRequest(agentId || 'assistant', {
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+      }, mappedHistory).then((response) => {
+        // We simulate streaming the final response back to the UI chunk by chunk
+        const chunkSize = 15;
+        let index = 0;
+        
+        function sendNextChunk() {
+          if (index < response.message.length) {
+            const chunk = response.message.substring(index, index + chunkSize);
+            event.sender.send('llm:stream-chunk', conversationId, chunk);
+            index += chunkSize;
+            setTimeout(sendNextChunk, 10);
+          } else {
+            event.sender.send('llm:stream-end', conversationId);
+          }
+        }
+        
+        sendNextChunk();
+      }).catch((e: any) => {
+        event.sender.send('llm:stream-error', conversationId, e.message);
+      });
+
+    } catch (e: any) {
+      logger.error(`agent:chat-stream failed: ${e.message}`);
+      event.sender.send('llm:stream-error', conversationId, e.message);
+    }
+  });
+
   // ─── 5. LLM operations ────────────────────────────────────
   const activeStreams = new Map<string, boolean>();
 
@@ -535,7 +580,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     { name: 'testing', description: 'Create and interpret unit, integration, and end-to-end tests.', capabilities: ['unit_tests', 'integration_tests', 'e2e_tests'], icon: '🧪' },
     { name: 'security', description: 'Review dependencies, static analysis findings, and secret risks.', capabilities: ['dependency_scanning', 'static_analysis', 'secret_detection'], icon: '🛡️' },
     { name: 'docs', description: 'Produce architecture, API, and user-facing documentation.', capabilities: ['readme', 'architecture_docs', 'api_docs'], icon: '📝' },
-  };
+  ];
 
   ipcMain.handle('adk:list-agents', async () => {
     try {

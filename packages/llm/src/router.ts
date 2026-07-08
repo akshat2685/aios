@@ -305,7 +305,7 @@ export class LLMRouter {
     const profile: RoutingProfile = this.config.routingProfile || 'BALANCED';
     const cloudMode: CloudMode = this.config.cloudMode || 'local';
     const routingMode: RoutingMode = this.config.routingMode || 'automatic';
-    const userPrefs: UserPreferences = this.config.userPreferences || {};
+    const userPrefs: UserPreferences = this.config.userPreferences || { preferLocal: false, preferOpenSource: false, preferCheapest: false };
 
     // 2. Handle Advanced Mode - Force specific provider/model
     if (routingMode === 'advanced' && request.forceProvider) {
@@ -567,7 +567,7 @@ export class LLMRouter {
       this.cache.set(request, response);
       
       // Record routing decision
-      this.recordRoutingDecision({ ...decision, providerId, model });
+      this.recordRoutingDecision({ ...decision, selectedProvider: providerId, selectedModel: model });
       
       return { ...response, routingDecision: decision };
     } catch (error: any) {
@@ -624,8 +624,7 @@ export class LLMRouter {
       if (promptTokens > 0 || completionTokens > 0) {
         this.tracker.trackUsage(providerId, request.model, promptTokens, completionTokens, request.agentId);
       }
-      
-      this.recordRoutingDecision({ ...decision, providerId, model });
+      this.recordRoutingDecision({ ...decision, selectedProvider: providerId, selectedModel: model });
       
       // Yield final decision info
       yield { chunk: '', done: true, usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } };
@@ -939,7 +938,7 @@ export class LLMRouter {
   }
 
   public disableProvider(providerId: LLMProviderId) {
-    if (!this.config.userPreferences) this.config.userPreferences = {};
+    if (!this.config.userPreferences) this.config.userPreferences = { preferLocal: false, preferOpenSource: false, preferCheapest: false };
     if (!this.config.userPreferences.disabledProviders) this.config.userPreferences.disabledProviders = [];
     if (!this.config.userPreferences.disabledProviders.includes(providerId)) {
       this.config.userPreferences.disabledProviders.push(providerId);
@@ -953,7 +952,7 @@ export class LLMRouter {
   }
 
   public disableModel(modelId: string) {
-    if (!this.config.userPreferences) this.config.userPreferences = {};
+    if (!this.config.userPreferences) this.config.userPreferences = { preferLocal: false, preferOpenSource: false, preferCheapest: false };
     if (!this.config.userPreferences.disabledModels) this.config.userPreferences.disabledModels = [];
     if (!this.config.userPreferences.disabledModels.includes(modelId)) {
       this.config.userPreferences.disabledModels.push(modelId);
@@ -973,6 +972,6 @@ export class LLMRouter {
   }
 
   public setUserPreferences(prefs: Partial<UserPreferences>) {
-    this.config.userPreferences = { ...this.config.userPreferences, ...prefs };
+    this.config.userPreferences = { preferLocal: false, preferOpenSource: false, preferCheapest: false, ...(this.config.userPreferences || {}), ...prefs } as UserPreferences;
   }
 }

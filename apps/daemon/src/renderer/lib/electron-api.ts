@@ -45,6 +45,7 @@ export interface ElectronAPI {
   };
   agent: {
     chat: (params: { message: string; agentId?: string }) => Promise<{ message: string; done: boolean }>;
+    chatStream: (params: { message: string; agentId?: string; conversationId: string; history?: any[] }) => Promise<void>;
     listAdkAgents: () => Promise<{ agents: AdkAgent[] }>;
     launch: (agentId: string) => Promise<{ status: string; agentId: string }>;
   };
@@ -65,6 +66,20 @@ export interface ElectronAPI {
       get: (provider: string) => Promise<{ isSet: boolean; count: number }>;
       delete: (provider: string) => Promise<{ status: string; error?: string }>;
     };
+    diagnostics: () => Promise<any>;
+    config: {
+      get: () => Promise<any>;
+      set: (key: string, value: any) => Promise<{ status: string; error?: string }>;
+    };
+    disableProvider: (providerId: string) => Promise<{ status: string; error?: string }>;
+    enableProvider: (providerId: string) => Promise<{ status: string; error?: string }>;
+    disableModel: (modelId: string) => Promise<{ status: string; error?: string }>;
+    setRoutingProfile: (profile: string) => Promise<{ status: string; error?: string }>;
+    setCloudMode: (mode: string) => Promise<{ status: string; error?: string }>;
+    setRoutingMode: (mode: string) => Promise<{ status: string; error?: string }>;
+    setUserPreferences: (prefs: any) => Promise<{ status: string; error?: string }>;
+    discoverModels: () => Promise<any>;
+    localModels: () => Promise<{ general: string[]; coding: string[] }>;
   };
   research: {
     conduct: (params: { query: string }) => Promise<any>;
@@ -162,6 +177,7 @@ function createMockAPI(): ElectronAPI {
         message: `[Mock Response] You said: ${message}`,
         done: true,
       }),
+      chatStream: async () => {},
       listAdkAgents: async () => ({
         agents: [
           { name: 'planner', description: 'Break tasks into structured work items.', capabilities: ['planning', 'decomposition', 'coordination'], icon: '🧠' },
@@ -192,6 +208,20 @@ function createMockAPI(): ElectronAPI {
         get: async (provider: string) => ({ isSet: false, count: 0 }),
         delete: async (provider: string) => ({ status: 'mock' }),
       },
+      diagnostics: async () => ({ providerHealth: {}, availableModels: [], routingHistory: [], cooldowns: {} }),
+      config: {
+        get: async () => ({}),
+        set: async () => ({ status: 'mock' }),
+      },
+      disableProvider: async () => ({ status: 'mock' }),
+      enableProvider: async () => ({ status: 'mock' }),
+      disableModel: async () => ({ status: 'mock' }),
+      setRoutingProfile: async () => ({ status: 'mock' }),
+      setCloudMode: async () => ({ status: 'mock' }),
+      setRoutingMode: async () => ({ status: 'mock' }),
+      setUserPreferences: async () => ({ status: 'mock' }),
+      discoverModels: async () => ({}),
+      localModels: async () => ({ general: [], coding: [] }),
     },
     research: {
       conduct: async ({ query }) => ({

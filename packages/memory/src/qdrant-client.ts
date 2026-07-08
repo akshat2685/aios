@@ -27,6 +27,17 @@ export class MemoryClient {
     this.collectionName = this.config.collectionName || 'aios_memory';
   }
 
+  async healthCheck(): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      // Just check if we can list collections
+      await this.client.getCollections();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async init(): Promise<void> {
     try {
       this.client = new QdrantClient({
@@ -34,13 +45,18 @@ export class MemoryClient {
         apiKey: this.config.qdrantApiKey
       });
 
+      if (!(await this.healthCheck())) {
+        this.warn('Qdrant memory database is unreachable. Will operate in degraded mode until it comes back.');
+        return; // Don't crash, just operate in degraded mode
+      }
+
       // Check if collection exists
       let collectionExists = false;
       try {
         await this.client.getCollection(this.collectionName);
         collectionExists = true;
       } catch (e) {
-        // Not found or failed to connect
+        // Not found
         this.info('Collection does not exist, creating new collection...');
       }
 
@@ -57,7 +73,7 @@ export class MemoryClient {
       this.info('Memory client initialized successfully');
     } catch (error: any) {
       this.error('Failed to initialize memory client', error);
-      throw error;
+      // We don't throw here to prevent bringing down the whole daemon
     }
   }
 
@@ -236,6 +252,9 @@ export class MemoryClient {
 
   async getStats(): Promise<Record<string, any>> {
     try {
+      if (!(await this.healthCheck())) {
+        return { points: 0, vectors: 0, status: 'unreachable' };
+      }
       const result = await this.client.getCollection(this.collectionName);
       if (!result) return { points: 0, vectors: 0, status: 'unknown' };
       return {
