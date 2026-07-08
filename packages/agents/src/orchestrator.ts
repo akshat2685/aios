@@ -2,6 +2,7 @@ import { BaseAgent } from './base-agent';
 import { LLMRouter } from '@aios/llm';
 import { CoreLogger } from '@aios/core';
 import { AssistantAgent, CoderAgent, ResearchAgent, PlannerAgent } from './core-agents';
+import { SpencerAgent } from './spencer-agent';
 import { AgentMessage, AgentResponse } from '@aios/types';
 
 import { getDelegationTool } from './tools/delegation-tool';
@@ -52,6 +53,7 @@ export class AgentOrchestrator {
 
     // Initialize core agents
     this.registerAgent('assistant', new AssistantAgent(router, logger));
+    this.registerAgent('spencer', new SpencerAgent(router, logger));
     this.registerAgent('coder', new CoderAgent(router, logger, workspacePath, coderApproval));
     this.registerAgent('researcher', new ResearchAgent(router, logger));
     this.registerAgent('planner', new PlannerAgent(router, logger));

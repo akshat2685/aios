@@ -15,6 +15,7 @@
     "build:packages": "npm run build --workspaces --if-present",
     "build:apps": "npm run build --workspace=apps/daemon --if-present",
     "test": "npm run test --workspaces --if-present -- --passWithNoTests",
+    "test:coverage": "npm run test --workspaces --if-present -- --coverage --passWithNoTests",
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint:fix --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml}\"",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^1.6.1",
     "concurrently": "^8.2.2",
     "prettier": "^3.1.0",
     "rimraf": "^5.0.5",

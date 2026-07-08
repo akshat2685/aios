@@ -17,6 +17,8 @@
     "@aios/devtools": "*",
     "@aios/llm": "*",
     "@aios/research": "*",
+    "@aios/sandbox": "*",
+    "@aios/offline-ai": "*",
     "@aios/types": "*",
     "@aios/utils": "*",
     "gray-matter": "^4.0.3",

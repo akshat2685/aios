@@ -106,6 +106,25 @@ export interface ElectronAPI {
     list: () => Promise<any[]>;
     uninstall: (id: string) => Promise<{ status: string; error?: string }>;
   };
+  voice: {
+    recordStart: () => Promise<any>;
+    recordStop: () => Promise<any>;
+    synthesize: (text: string) => Promise<any>;
+  };
+  sandbox: {
+    create: (name: string, task: string) => Promise<any>;
+    execute: (id: string, command: string) => Promise<any>;
+    promote: (id: string) => Promise<any>;
+  };
+  twin: {
+    getProfile: () => Promise<any>;
+  };
+  federation: {
+    getPeers: () => Promise<any[]>;
+  };
+  graphViz: {
+    getSnapshot: () => Promise<any>;
+  };
   workflow: {
     list: () => Promise<any[]>;
     save: (workflow: any) => Promise<{ status: string; error?: string }>;

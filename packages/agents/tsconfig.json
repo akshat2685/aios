@@ -17,6 +17,8 @@
     { "path": "../research" },
     { "path": "../types" },
     { "path": "../utils" },
-    { "path": "../computer" }
+    { "path": "../computer" },
+    { "path": "../sandbox" },
+    { "path": "../offline-ai" }
   ]
 }

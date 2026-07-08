@@ -480,3 +480,68 @@ export interface VisionAnalysisResult {
   }>;
   durationMs: number;
 }
+
+// ============================================================================
+// Spencer Production Additions
+// ============================================================================
+
+export interface ProsodyControl {
+  emotion?: 'neutral' | 'happy' | 'sad' | 'angry' | 'confused';
+  emphasis?: string[];
+  speakingRate?: number;
+  pitch?: number;
+  volume?: number;
+}
+
+export interface AudioChunk {
+  data: Buffer;
+  timestamp: Date;
+  isComplete: boolean;
+}
+
+export interface TranscriptChunk {
+  text: string;
+  isFinal: boolean;
+  confidence: number;
+  language: string;
+  timestamp: Date;
+  startTime: number;
+  endTime: number;
+}
+
+export interface ToolCall {
+  id: string;
+  toolName: string;
+  input: any;
+  dependsOn?: string[];
+}
+
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  category: 'file' | 'shell' | 'research' | 'voice' | 'memory' | 'agent' | 'llm' | 'automation' | 'security';
+  inputSchema: any;
+  outputSchema: any;
+  timeout: number;
+  maxRetries: number;
+  requires_approval: boolean;
+  parallel_safe: boolean;
+  executor: (input: any, context: any) => Promise<any>;
+}
+
+export interface CacheEntry {
+  result: any;
+  timestamp: number;
+}
+
+export interface ChainResult {
+  success: boolean;
+  results?: Map<string, any>;
+  failedTool?: string;
+  error?: string;
+  partialResults?: Map<string, any>;
+  totalExecutionTime?: number;
+}
+

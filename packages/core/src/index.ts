@@ -12,3 +12,4 @@ export { isDev } from '@aios/utils';
 export { isProduction } from '@aios/utils';
 export { MemoryService } from './memory-service';
 export * from './telemetry';
+export * from './metrics';

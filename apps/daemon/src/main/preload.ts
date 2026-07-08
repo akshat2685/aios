@@ -65,6 +65,15 @@ const validChannels = [
   'plugins:list',
   'plugins:uninstall',
   'automation:triggers',
+  'voice:record-start',
+  'voice:record-stop',
+  'voice:synthesize',
+  'sandbox:create',
+  'sandbox:execute',
+  'sandbox:promote',
+  'twin:getProfile',
+  'federation:getPeers',
+  'graph-viz:getSnapshot'
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -169,6 +178,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ollamaModels: () => ipcRenderer.invoke('system:ollama:models'),
     ollamaPs: () => ipcRenderer.invoke('system:ollama:ps'),
   },
+  voice: {
+    recordStart: () => ipcRenderer.invoke('voice:record-start'),
+    recordStop: () => ipcRenderer.invoke('voice:record-stop'),
+    synthesize: (text: string) => ipcRenderer.invoke('voice:synthesize', { text }),
+  },
+  sandbox: {
+    create: (name: string, task: string) => ipcRenderer.invoke('sandbox:create', { name, task }),
+    execute: (id: string, command: string) => ipcRenderer.invoke('sandbox:execute', { id, command }),
+    promote: (id: string) => ipcRenderer.invoke('sandbox:promote', { id }),
+  },
+  twin: {
+    getProfile: () => ipcRenderer.invoke('twin:getProfile'),
+  },
+  federation: {
+    getPeers: () => ipcRenderer.invoke('federation:getPeers'),
+  },
+  graphViz: {
+    getSnapshot: () => ipcRenderer.invoke('graph-viz:getSnapshot'),
+  },
   on: (channel: string, callback: (...args: any[]) => void) => {
     if (!validChannels.includes(channel) && !channel.startsWith('llm:')) return;
     const listener = (_event: IpcRendererEvent, ...args: any[]) => callback(...args);
@@ -247,6 +275,25 @@ declare global {
       plugins: {
         list: () => Promise<any[]>;
         uninstall: (id: string) => Promise<{ status: string; error?: string }>;
+      };
+      voice: {
+        recordStart: () => Promise<any>;
+        recordStop: () => Promise<any>;
+        synthesize: (text: string) => Promise<any>;
+      };
+      sandbox: {
+        create: (name: string, task: string) => Promise<any>;
+        execute: (id: string, command: string) => Promise<any>;
+        promote: (id: string) => Promise<any>;
+      };
+      twin: {
+        getProfile: () => Promise<any>;
+      };
+      federation: {
+        getPeers: () => Promise<any[]>;
+      };
+      graphViz: {
+        getSnapshot: () => Promise<any>;
       };
       on: (channel: string, callback: (...args: any[]) => void) => () => void;
       once: (channel: string, callback: (...args: any[]) => void) => void;
