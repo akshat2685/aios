@@ -189,6 +189,13 @@ export class AgentOrchestrator {
     this.logger.info(`Orchestrator registered agent: ${id}`);
   }
 
+  public unregisterAgent(id: string) {
+    if (this.agents.has(id)) {
+      this.agents.delete(id);
+      this.logger.info(`Orchestrator unregistered agent: ${id}`);
+    }
+  }
+
   async routeRequest(agentId: string, message: AgentMessage, history: AgentMessage[] = []): Promise<AgentResponse> {
     const agent = this.agents.get(agentId);
     if (!agent) {
