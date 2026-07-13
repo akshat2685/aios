@@ -1,7 +1,7 @@
 import { BaseAgent } from './base-agent';
 import { LLMRouter } from '@aios/llm';
 import { CoreLogger } from '@aios/core';
-import { AssistantAgent, CoderAgent, ResearchAgent, PlannerAgent } from './core-agents';
+import { AssistantAgent, CoderAgent, ResearchAgent, PlannerAgent, ReviewerAgent, TesterAgent, ArchitectAgent, SecurityAgent, PerformanceAgent } from './core-agents';
 import { SpencerAgent } from './spencer-agent';
 import { AgentMessage, AgentResponse } from '@aios/types';
 
@@ -9,25 +9,28 @@ import { getDelegationTool } from './tools/delegation-tool';
 import { SkillRegistry } from './skill-registry';
 import { getSkillReadTool } from './tools/skill-tools';
 import { loadPlans, savePlans } from './tools/planner-tools';
-import { MemoryService } from '@aios/core';
+import { MemoryOperations } from '@aios/core';
 import { GuardRail, askApproval } from '@aios/security';
+import { AgentReputationTracker } from './reputation';
 
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent> = new Map();
   private logger: CoreLogger;
   public skillRegistry: SkillRegistry;
-  private memory?: MemoryService;
+  private memory?: MemoryOperations;
+  public reputationTracker: AgentReputationTracker;
 
   constructor(
     router: LLMRouter, 
     logger: CoreLogger, 
     workspacePath = 'C:\\Users\\ijain\\AIOS',
     requestApproval?: (action: string, details: string) => Promise<boolean>,
-    memory?: MemoryService
+    memory?: MemoryOperations
   ) {
     this.logger = logger;
     this.memory = memory;
     this.skillRegistry = new SkillRegistry(logger, workspacePath);
+    this.reputationTracker = new AgentReputationTracker();
     
     // Setup Security Guardrail
     const policy = {
@@ -57,6 +60,11 @@ export class AgentOrchestrator {
     this.registerAgent('coder', new CoderAgent(router, logger, workspacePath, coderApproval));
     this.registerAgent('researcher', new ResearchAgent(router, logger));
     this.registerAgent('planner', new PlannerAgent(router, logger));
+    this.registerAgent('reviewer', new ReviewerAgent(router, logger));
+    this.registerAgent('tester', new TesterAgent(router, logger));
+    this.registerAgent('architect', new ArchitectAgent(router, logger));
+    this.registerAgent('security', new SecurityAgent(router, logger));
+    this.registerAgent('performance', new PerformanceAgent(router, logger));
 
     // Initialize cross-agent delegation tool
     const delegationTool = getDelegationTool(async (agentId, task, planId, taskId) => {
@@ -110,6 +118,10 @@ export class AgentOrchestrator {
   }
 
   public async init(): Promise<void> {
+    await this.refreshSkills();
+  }
+
+  public async refreshSkills(): Promise<void> {
     await this.skillRegistry.discoverSkills();
     const skills = this.skillRegistry.getSkills();
     
@@ -123,8 +135,25 @@ export class AgentOrchestrator {
 
     for (const agent of this.agents.values()) {
       if (skillsContext) {
-        agent.additionalSystemContext = `<skills>\n${skillsContext}\n</skills>`;
-        agent.registerTool(skillReadTool);
+        // Only append or update the skills block, simpler way is just to overwrite additionalSystemContext if it only contains skills.
+        // If additionalSystemContext has other things, we would need to replace only the skills block.
+        // For now, we will replace the whole skills block.
+        const currentContext = agent.additionalSystemContext || '';
+        const skillsRegex = /<skills>[\s\S]*?<\/skills>/;
+        const newSkillsBlock = `<skills>\n${skillsContext}\n</skills>`;
+        
+        if (skillsRegex.test(currentContext)) {
+          agent.additionalSystemContext = currentContext.replace(skillsRegex, newSkillsBlock);
+        } else {
+          agent.additionalSystemContext = currentContext + (currentContext ? '\n' : '') + newSkillsBlock;
+        }
+        
+        // ensure tool is registered
+        try {
+          agent.registerTool(skillReadTool);
+        } catch(e) {
+          // Tool might already be registered, depending on BaseAgent implementation
+        }
       }
     }
   }
@@ -169,5 +198,102 @@ export class AgentOrchestrator {
   async broadcast(message: AgentMessage): Promise<void> {
     this.logger.info(`Broadcasting message to all agents: ${message.content}`);
     // Implementation for multi-agent coordination
+  }
+
+  async routeTask(task: string, taskType: string): Promise<AgentResponse> {
+    const availableAgents = Array.from(this.agents.keys());
+    if (availableAgents.length === 0) {
+      throw new Error("No agents available to route task");
+    }
+    
+    // The orchestrator learns from stats to route tasks
+    const bestAgent = this.reputationTracker.recommendAgentForTask(taskType, availableAgents);
+    const successRate = (this.reputationTracker.getSuccessRate(bestAgent) * 100).toFixed(0);
+    
+    this.logger.info(`Routing task of type '${taskType}' to '${bestAgent}' agent (Success Rate: ${successRate}%)`);
+    
+    let iterations = 1;
+    let success = false;
+    try {
+      const response = await this.routeRequest(bestAgent, { role: 'user', content: task, timestamp: Date.now() });
+      success = !response.message.toLowerCase().includes('failed'); // Basic heuristic
+      return response;
+    } finally {
+      this.reputationTracker.recordTaskCompletion(bestAgent, success, iterations);
+    }
+  }
+
+  async verifyAndCorrect(task: string, maxIterations = 3): Promise<AgentResponse> {
+    let iteration = 0;
+    let currentTask = task;
+    let lastResponse: AgentResponse | null = null;
+    let history: AgentMessage[] = [];
+
+    while (iteration < maxIterations) {
+      this.logger.info(`verifyAndCorrect: Iteration ${iteration + 1} for task`);
+      // 1. Coder executes the task
+      lastResponse = await this.routeRequest('coder', { role: 'user', content: currentTask, timestamp: Date.now() }, history);
+      
+      // Update history for coder
+      history.push({ role: 'user', content: currentTask, timestamp: Date.now() });
+      history.push({ role: 'assistant', content: lastResponse.message, timestamp: Date.now() });
+
+      // 2. Reviewer checks the result
+      const reviewPrompt = `Please review the following code changes and output for the task: "${task}".\n\nCoder Output:\n${lastResponse.message}\n\nIf it meets all requirements and quality standards, reply with exactly "APPROVED". Otherwise, provide actionable feedback for the coder to fix.`;
+      const reviewResponse = await this.routeRequest('reviewer', { role: 'user', content: reviewPrompt, timestamp: Date.now() });
+      
+      if (reviewResponse.message.trim().toUpperCase().includes('APPROVED')) {
+        this.logger.info(`verifyAndCorrect: Reviewer approved on iteration ${iteration + 1}, routing to Tester`);
+
+        // 3. Tester validates the result
+        const testPrompt = `Please test the following code changes and output for the task: "${task}".\n\nCoder Output:\n${lastResponse.message}\n\nIf all tests pass and the code functions correctly, reply with exactly "PASS". Otherwise, provide actionable feedback for the coder to fix.`;
+        const testResponse = await this.routeRequest('tester', { role: 'user', content: testPrompt, timestamp: Date.now() });
+
+        if (testResponse.message.trim().toUpperCase().includes('PASS')) {
+          this.logger.info(`verifyAndCorrect: Tester passed on iteration ${iteration + 1}`);
+          this.reputationTracker.recordTaskCompletion('coder', true, iteration + 1);
+          this.reputationTracker.recordTaskCompletion('reviewer', true, 1);
+          this.reputationTracker.recordTaskCompletion('tester', true, 1);
+          return lastResponse;
+        }
+
+        // Setup for next iteration (Tester failed)
+        this.logger.warn(`verifyAndCorrect: Tester reported failures: ${testResponse.message.substring(0, 100)}...`);
+        this.reputationTracker.recordTaskCompletion('tester', false, 1);
+        currentTask = `The tester provided the following feedback on your previous output. Please fix the issues:\n\nTester Feedback:\n${testResponse.message}`;
+      } else {
+        // Setup for next iteration (Reviewer failed)
+        this.logger.warn(`verifyAndCorrect: Reviewer requested changes: ${reviewResponse.message.substring(0, 100)}...`);
+        this.reputationTracker.recordTaskCompletion('reviewer', false, 1);
+        currentTask = `The reviewer provided the following feedback on your previous output. Please fix the issues:\n\nReviewer Feedback:\n${reviewResponse.message}`;
+      }
+      
+      iteration++;
+    }
+    
+    this.reputationTracker.recordTaskCompletion('coder', false, iteration);
+    this.logger.error(`verifyAndCorrect: Max iterations reached without approval.`);
+    return lastResponse || { message: 'Failed to complete task', done: true };
+  }
+
+  async resolveDebate(task: string, proposedPlan: string): Promise<AgentResponse> {
+    this.logger.info(`Starting debate for critical task: ${task}`);
+    
+    const debatePrompt = `Please evaluate the following proposed plan for the task: "${task}".\n\nProposed Plan:\n${proposedPlan}\n\nProvide your analysis, critique, and actionable improvements based on your specialized perspective.`;
+
+    const [architectRes, securityRes, performanceRes] = await Promise.all([
+      this.routeRequest('architect', { role: 'user', content: debatePrompt, timestamp: Date.now() }),
+      this.routeRequest('security', { role: 'user', content: debatePrompt, timestamp: Date.now() }),
+      this.routeRequest('performance', { role: 'user', content: debatePrompt, timestamp: Date.now() })
+    ]);
+
+    this.logger.info(`Received debate feedback from Architect, Security, and Performance agents.`);
+
+    const synthesisPrompt = `You are a neutral orchestrator. A critical task was proposed:\n"${task}"\n\nProposed Plan:\n${proposedPlan}\n\nThe following expert analyses were provided:\n\nArchitect Feedback:\n${architectRes.message}\n\nSecurity Feedback:\n${securityRes.message}\n\nPerformance Feedback:\n${performanceRes.message}\n\nPlease synthesize these critiques and produce a 'Final Decision' summary that merges the best parts, resolves conflicts, and provides a final approved plan for execution. Start your output with "Final Decision:".`;
+
+    const finalDecisionRes = await this.routeRequest('planner', { role: 'user', content: synthesisPrompt, timestamp: Date.now() });
+
+    this.logger.info(`Debate resolved with Final Decision.`);
+    return finalDecisionRes;
   }
 }

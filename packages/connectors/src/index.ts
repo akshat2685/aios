@@ -1,3 +1,3 @@
-export * from './manager';
+export * from './mediator';
 export * from './fs-connector';
 export * from './doc-parser';

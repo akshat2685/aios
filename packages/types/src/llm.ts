@@ -14,7 +14,7 @@ export type TaskType =
 
 export type RoutingProfile = 'BALANCED' | 'FASTEST' | 'CHEAPEST' | 'HIGHEST_QUALITY';
 
-export type CloudMode = 'local' | 'online';
+export type CloudMode = 'local' | 'online' | 'hybrid';
 export type RoutingMode = 'automatic' | 'advanced';
 
 export interface ModelCapability {

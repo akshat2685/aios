@@ -5,3 +5,4 @@ export * from './skill-registry';
 export * from './registry';
 export * from './spencer-agent';
 export * from './tools/dag-executor';
+export * from './reputation';

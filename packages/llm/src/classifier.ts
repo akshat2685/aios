@@ -180,6 +180,28 @@ export class TaskClassifier {
   }
 
   /**
+   * Analyze the complexity of a task based on prompt heuristics
+   */
+  public static analyzeComplexity(prompt: string): 'simple' | 'complex' | 'security' {
+    const lower = prompt.toLowerCase();
+    
+    // 1. Security Check
+    const securityKeywords = ['password', 'secret', 'key', 'token', 'credential', 'auth', 'vulnerability', 'exploit', 'hack', 'pii', 'confidential'];
+    if (securityKeywords.some(kw => lower.includes(kw))) {
+      return 'security';
+    }
+
+    // 2. Complex Check
+    const complexKeywords = ['architect', 'design', 'refactor', 'system', 'analyze', 'explain', 'compare', 'evaluate', 'plan', 'strategy', 'why', 'prove'];
+    if (prompt.length > 500 || complexKeywords.some(kw => lower.includes(kw))) {
+      return 'complex';
+    }
+
+    // 3. Simple Check
+    return 'simple';
+  }
+
+  /**
    * Classify using a local LLM as fallback when confidence is low
    * This should be called only when heuristic confidence < threshold
    */

@@ -114,7 +114,6 @@ export function CommandPalette({ standalone = false }: CommandPaletteProps) {
 
   const staticCommands: Command[] = [
     { id: 'act-ask', name: 'Ask AI', category: 'Actions', icon: <MessageSquare size={16} />, action: () => { if(standalone){api.agent.launch('assistant');}else{navigate('/chat'); close();} } },
-    { id: 'act-vscode', name: 'Open VSCode', category: 'Actions', icon: <Code size={16} />, action: async () => { await api.app.execute('code .'); close(); } },
     { id: 'act-project', name: 'Create Project', category: 'Actions', icon: <FolderDot size={16} />, action: () => { if(standalone){api.agent.launch('website');}else{navigate('/chat'); close();} } },
     { id: 'act-search-mem', name: 'Search Memory', category: 'Actions', icon: <Search size={16} />, action: () => { if(standalone){api.agent.launch('research');}else{navigate('/research'); close();} } },
     { id: 'nav-dashboard', name: 'Go to Dashboard', category: 'Navigation', icon: <LayoutDashboard size={16} />, shortcut: 'G D', action: () => { if(!standalone){navigate('/');} close(); } },

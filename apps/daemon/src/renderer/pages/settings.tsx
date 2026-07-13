@@ -88,6 +88,14 @@ export default function SettingsPage() {
     llm: {
       defaultProvider: 'ollama',
       defaultModel: 'llama3.2:latest',
+      routingProfile: 'BALANCED',
+      cloudMode: 'online',
+      routingMode: 'automatic',
+      userPreferences: {
+        preferLocal: false,
+        preferOpenSource: false,
+        preferCheapest: false
+      },
       providers: {
         ollama: { baseUrl: 'http://127.0.0.1:11434' },
         openai: { model: 'gpt-4o' },

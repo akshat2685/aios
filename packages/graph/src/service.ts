@@ -2,14 +2,17 @@ import { getDatabase, schema } from './db';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CoreLogger } from '@aios/core';
+import { IMemoryClient } from '@aios/types';
 
 export class GraphService {
   private db: ReturnType<typeof getDatabase>;
   private logger: CoreLogger;
+  private memoryClient?: IMemoryClient;
 
-  constructor(logger: CoreLogger, dbPath?: string) {
+  constructor(logger: CoreLogger, dbPath?: string, memoryClient?: IMemoryClient) {
     this.logger = logger;
     this.db = getDatabase(dbPath);
+    this.memoryClient = memoryClient;
     this.logger.info('Knowledge Graph service initialized');
   }
 
@@ -64,6 +67,15 @@ export class GraphService {
       updatedAt: Date.now(),
     });
     this.logger.info(`Created project: ${name} (${id})`);
+    
+    // Incremental index update
+    if (this.memoryClient) {
+      await this.memoryClient.add({
+        id: `project_${id}`,
+        content: `Project: ${name}\nDescription: ${description || ''}`,
+        metadata: { type: 'PROJECT', projectId: id }
+      });
+    }
     return id;
   }
 
@@ -73,6 +85,9 @@ export class GraphService {
 
   async deleteProject(id: string): Promise<void> {
     await this.db.delete(schema.projects).where(eq(schema.projects.id, id));
+    if (this.memoryClient) {
+      await this.memoryClient.delete(`project_${id}`);
+    }
     this.logger.info(`Deleted project: ${id}`);
   }
 
@@ -91,6 +106,15 @@ export class GraphService {
       updatedAt: Date.now(),
     });
     this.logger.info(`Created task: ${title} (${id}) in project ${projectId}`);
+    
+    // Incremental index update
+    if (this.memoryClient) {
+      await this.memoryClient.add({
+        id: `task_${id}`,
+        content: `Task: ${title}\nDescription: ${description || ''}\nPriority: ${priority}`,
+        metadata: { type: 'TASK', taskId: id, projectId }
+      });
+    }
     return id;
   }
 
@@ -104,6 +128,31 @@ export class GraphService {
 
   async deleteTask(id: string): Promise<void> {
     await this.db.delete(schema.tasks).where(eq(schema.tasks.id, id));
+    if (this.memoryClient) {
+      await this.memoryClient.delete(`task_${id}`);
+    }
+  }
+  
+  /**
+   * Semantic Task Retrieval
+   */
+  async searchTasksSemantically(query: string, limit: number = 5) {
+    if (!this.memoryClient) {
+      this.logger.warn('Memory client not available for semantic task search');
+      return [];
+    }
+    
+    const results = await this.memoryClient.search({ query, limit });
+    const taskIds = results
+      .filter(r => r.metadata?.type === 'TASK')
+      .map(r => r.metadata.taskId);
+      
+    if (taskIds.length === 0) return [];
+    
+    const client = (this.db as any).session.client;
+    const placeholders = taskIds.map(() => '?').join(',');
+    const tasks = await client.execute(`SELECT * FROM tasks WHERE id IN (${placeholders})`, taskIds);
+    return tasks.rows || tasks;
   }
 
   // --- Files ---

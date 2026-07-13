@@ -29,7 +29,7 @@ export class GraphQueryEngine {
     // Stub: In production, this would:
     // 1. Query GraphBuilder (knowledge/src/builder.ts) for graph_nodes and graph_edges
     // 2. Query GraphService (graph/src/service.ts) for projects, tasks, task_files
-    // 3. Query MemoryService for memory vectors and their metadata
+    // 3. Query MemoryClient for memory vectors and their metadata
     // 4. Merge into unified GraphVizNode[] and GraphVizEdge[] arrays
     // 5. Apply filters (type, time range, search, depth)
 

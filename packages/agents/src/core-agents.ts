@@ -124,3 +124,33 @@ export class SummarizerAgent extends BaseAgent {
     Focus on the key takeaways and omit unnecessary noise.`;
   }
 }
+
+export class ArchitectAgent extends BaseAgent {
+  constructor(router: LLMRouter, logger: CoreLogger) {
+    super('Architect', 'System Architect', router, logger);
+  }
+
+  protected getSystemPrompt(): string {
+    return `You are the AIOS Architect Agent. You evaluate plans and code from a high-level system architecture perspective. Focus on scalability, modularity, and maintainability. Provide structured critique and actionable improvements.`;
+  }
+}
+
+export class SecurityAgent extends BaseAgent {
+  constructor(router: LLMRouter, logger: CoreLogger) {
+    super('Security', 'Security Specialist', router, logger);
+  }
+
+  protected getSystemPrompt(): string {
+    return `You are the AIOS Security Agent. You evaluate plans and code for security vulnerabilities, access control flaws, data privacy risks, and injection attack vectors. Provide structured critique and actionable improvements.`;
+  }
+}
+
+export class PerformanceAgent extends BaseAgent {
+  constructor(router: LLMRouter, logger: CoreLogger) {
+    super('Performance', 'Performance Engineer', router, logger);
+  }
+
+  protected getSystemPrompt(): string {
+    return `You are the AIOS Performance Agent. You evaluate plans and code for computational efficiency, memory usage, algorithmic complexity, and potential bottlenecks. Provide structured critique and actionable improvements.`;
+  }
+}

@@ -279,6 +279,25 @@ function createMockAPI(): ElectronAPI {
       ollamaModels: async () => [],
       ollamaPs: async () => [],
     },
+    voice: {
+      recordStart: async () => ({ status: 'mock' }),
+      recordStop: async () => ({ status: 'mock' }),
+      synthesize: async (text: string) => ({ status: 'mock' }),
+    },
+    sandbox: {
+      create: async (name: string, task: string) => ({ status: 'mock' }),
+      execute: async (id: string, command: string) => ({ status: 'mock' }),
+      promote: async (id: string) => ({ status: 'mock' }),
+    },
+    twin: {
+      getProfile: async () => ({ status: 'mock' }),
+    },
+    federation: {
+      getPeers: async () => [],
+    },
+    graphViz: {
+      getSnapshot: async () => ({ status: 'mock' }),
+    },
     on: () => {},
     off: () => {},
   };

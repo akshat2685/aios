@@ -11,15 +11,15 @@ export class FileSystemConnector implements IConnector {
   private watcher: chokidar.FSWatcher | null = null;
   private logger: CoreLogger;
   private watchPaths: string[];
-  private onIngest: (payload: IngestionPayload) => Promise<void>;
+  private onIngest?: (payload: IngestionPayload) => Promise<void>;
 
-  constructor(config: { watchPaths: string[], onIngest: (payload: IngestionPayload) => Promise<void> }, logger: CoreLogger) {
+  constructor(config: { watchPaths: string[] }, logger: CoreLogger) {
     this.watchPaths = config.watchPaths;
-    this.onIngest = config.onIngest;
     this.logger = logger;
   }
 
-  async start(): Promise<void> {
+  async start(onData: (payload: IngestionPayload) => Promise<void>, signal?: AbortSignal): Promise<void> {
+    this.onIngest = onData;
     this.logger.info(`Starting File System Connector watching: ${this.watchPaths.join(', ')}`);
     
     this.watcher = chokidar.watch(this.watchPaths, {
@@ -66,7 +66,9 @@ export class FileSystemConnector implements IConnector {
         }
       };
 
-      await this.onIngest(payload);
+      if (this.onIngest) {
+        await this.onIngest(payload);
+      }
     } catch (error: any) {
       this.logger.error(`Error processing file ${filePath}: ${error.message}`);
     }

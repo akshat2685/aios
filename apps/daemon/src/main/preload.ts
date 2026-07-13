@@ -87,7 +87,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     hide: () => ipcRenderer.invoke('app:hide'),
     show: () => ipcRenderer.invoke('app:show'),
     restart: () => ipcRenderer.invoke('app:restart'),
-    execute: (command: string) => ipcRenderer.invoke('app:execute', command),
   },
   clipboard: {
     read: () => ipcRenderer.invoke('clipboard:read'),
@@ -228,7 +227,6 @@ declare global {
         hide: () => Promise<void>;
         show: () => Promise<void>;
         restart: () => Promise<void>;
-        execute: (command: string) => Promise<{ status: string; stdout?: string; error?: string; stderr?: string }>;
       };
       clipboard: {
         read: () => Promise<{ status: string; text?: string; error?: string }>;

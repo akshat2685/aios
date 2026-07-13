@@ -15,9 +15,11 @@ export interface MemorySearchOptions {
   filter?: Record<string, any>;
   limit?: number;
   offset?: number;
+  hybrid?: boolean;
 }
+import { IMemoryClient } from '@aios/types';
 
-export class MemoryClient {
+export class MemoryClient implements IMemoryClient {
   private client!: QdrantClient;
   private collectionName: string;
   private config: any;
@@ -68,6 +70,18 @@ export class MemoryClient {
             distance: 'Cosine',
           },
         });
+        
+        try {
+          // Skeleton for Hybrid Search:
+          // In a real implementation we would create a text payload index:
+          // await this.client.api('collections').createPayloadIndex(this.collectionName, {
+          //   field_name: 'content',
+          //   field_schema: 'text',
+          // });
+        } catch (e: any) {
+          this.warn('Failed to create text payload index for hybrid search', e);
+        }
+
         this.info(`Created collection ${this.collectionName} with dimension ${dim}`);
       }
       this.info('Memory client initialized successfully');
@@ -135,9 +149,30 @@ export class MemoryClient {
   async search(options: MemorySearchOptions): Promise<MemoryRecord[]> {
     try {
       const vector = await this.getEmbedding(options.query);
+      
+      let filter = options.filter as any;
+      
+      if (options.hybrid) {
+        // Skeleton for hybrid search: Combine dense vector search with a sparse text match
+        // In a fully optimized production setup, we would use Qdrant's `prefetch` 
+        // with sparse vectors and Reciprocal Rank Fusion (RRF).
+        const textMatchFilter = {
+          key: 'content',
+          match: { text: options.query }
+        };
+        
+        if (filter && filter.must) {
+          filter.must.push(textMatchFilter);
+        } else if (filter) {
+          filter = { must: [textMatchFilter, ...(Array.isArray(filter) ? filter : [filter])] };
+        } else {
+          filter = { must: [textMatchFilter] };
+        }
+      }
+
       const points = await this.client.search(this.collectionName, {
         vector: vector,
-        filter: options.filter as any,
+        filter: filter,
         limit: options.limit || 10,
         offset: options.offset || 0,
         with_payload: true,

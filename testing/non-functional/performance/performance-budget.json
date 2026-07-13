@@ -1,0 +1,6 @@
+{
+  "max_router_latency_ms": 50,
+  "max_memory_retrieval_ms": 200,
+  "max_tool_execution_overhead_ms": 150,
+  "max_voice_tts_latency_ms": 500
+}

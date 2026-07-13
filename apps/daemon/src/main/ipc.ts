@@ -1,5 +1,4 @@
 import { ipcMain, BrowserWindow, clipboard } from 'electron';
-import { exec } from 'child_process';
 import { AIOSKernel } from '../kernel';
 import { CoreLogger, TelemetryEngine } from '@aios/core';
 import { ConfigManager } from '@aios/config';
@@ -28,7 +27,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
   // ─── 2. Memory service operations ─────────────────────────
   ipcMain.handle('memory:search', async (_, options: any) => {
     try {
-      return await kernel.memory.searchMemory(options);
+      return await kernel.memoryClient.search(options);
     } catch (e: any) {
       logger.error(`memory:search failed: ${e.message}`);
       return [];
@@ -56,7 +55,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
 
   ipcMain.handle('memory:delete', async (_, { id }) => {
     try {
-      await kernel.memory.deleteRecord(id);
+      await kernel.memoryClient.delete(id);
       return { status: 'success' };
     } catch (e: any) {
       logger.error(`memory:delete failed: ${e.message}`);
@@ -66,7 +65,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
 
   ipcMain.handle('memory:clear', async () => {
     try {
-      await kernel.memory.clear();
+      await kernel.memoryClient.clear();
       return { status: 'success' };
     } catch (e: any) {
       logger.error(`memory:clear failed: ${e.message}`);
@@ -76,7 +75,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
 
   ipcMain.handle('memory:stats', async () => {
     try {
-      return await kernel.memory.getStats();
+      return await kernel.memoryClient.getStats();
     } catch (e: any) {
       logger.error(`memory:stats failed: ${e.message}`);
       return { points: 0, vectors: 0, status: 'unreachable' };
@@ -504,7 +503,7 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
   ipcMain.handle('system:status', async () => {
     try {
       const health = await kernel.router.checkAllHealth();
-      const memStats = await kernel.memory.getStats();
+      const memStats = await kernel.memoryClient.getStats();
       return {
         version: '0.1.0',
         uptime: process.uptime(),
@@ -548,19 +547,6 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
     app.exit(0);
   });
 
-  ipcMain.handle('app:execute', async (_, command: string) => {
-    return new Promise((resolve) => {
-      exec(command, (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`app:execute failed: ${error.message}`);
-          resolve({ status: 'error', error: error.message, stderr });
-        } else {
-          resolve({ status: 'success', stdout });
-        }
-      });
-    });
-  });
-
   ipcMain.handle('clipboard:read', async () => {
     try {
       const text = clipboard.readText();
@@ -584,7 +570,12 @@ export function setupIPC(kernel: AIOSKernel, logger: CoreLogger) {
 
   ipcMain.handle('adk:list-agents', async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8765/agents');
+      const token = process.env.AIOS_IPC_SECRET || '';
+      const response = await fetch('http://127.0.0.1:8765/agents', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data: any = await response.json();
       return {
         agents: data.agents.map((a: any, i: number) => ({

@@ -5,25 +5,20 @@ import { MemoryClient } from '../src/qdrant-client';
 // Mock Qdrant Client module
 const mockRequestFn = vi.fn();
 
-vi.mock('qdrant-client', () => {
-  class MockApi {
-    public collections: any;
-    constructor() {
-      this.collections = {
-        getCollection: (name: string) => mockRequestFn({ path: '/collections/{collection_name}', method: 'GET', collectionName: name }),
-        createCollection: (name: string, data: any) => mockRequestFn({ path: '/collections/{collection_name}', method: 'PUT', collectionName: name, body: data }),
-        upsertPoints: (name: string, data: any) => mockRequestFn({ path: '/collections/{collection_name}/points', method: 'PUT', collectionName: name, body: data }),
-        searchPoints: (name: string, data: any) => mockRequestFn({ path: '/collections/{collection_name}/points/search', method: 'POST', collectionName: name, body: data }),
-        scrollPoints: (name: string, data: any) => mockRequestFn({ path: '/collections/{collection_name}/points/scroll', method: 'POST', collectionName: name, body: data }),
-        deletePoints: (name: string, data: any) => mockRequestFn({ path: '/collections/{collection_name}/points/delete', method: 'POST', collectionName: name, body: data }),
-        getPoints: (name: string, data: any) => mockRequestFn({ path: '/collections/{collection_name}/points', method: 'POST', collectionName: name, body: data }),
-      };
-    }
-  }
+
+vi.mock('@qdrant/js-client-rest', () => {
   return {
-    Api: MockApi,
-    Distance: { Cosine: 'Cosine' },
-    default: MockApi
+    QdrantClient: class {
+      getCollections() { return Promise.resolve({ collections: [] }); }
+      getCollection(name: any) { return mockRequestFn({ path: '/collections/{collection_name}', method: 'GET', collectionName: name }); }
+      createCollection(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}', method: 'PUT', collectionName: name, body: data }); }
+      upsert(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points', method: 'PUT', collectionName: name, body: data }); }
+      search(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points/search', method: 'POST', collectionName: name, body: data }); }
+      scroll(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points/scroll', method: 'POST', collectionName: name, body: data }); }
+      delete(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points/delete', method: 'POST', collectionName: name, body: data }); }
+      retrieve(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points', method: 'POST', collectionName: name, body: data }); }
+      deleteCollection(name: any) { return mockRequestFn({ path: '/collections/{collection_name}', method: 'DELETE', collectionName: name }); }
+    }
   };
 });
 
@@ -123,10 +118,13 @@ describe('AIOS Memory & RAG Pipeline Tests', () => {
         ok: true,
         json: async () => ({ embedding: new Array(384).fill(0.1) })
       });
-      // Mock upsertPoints response
+      // Mock getCollection for init()
+      mockRequestFn.mockResolvedValueOnce({ data: { result: { status: 'green' } } });
+      // Mock upsert response
       mockRequestFn.mockResolvedValueOnce({ data: { result: { status: 'completed' } } });
 
       const client = new MemoryClient();
+      await client.init();
       const record = {
         id: 'test-uuid-1',
         type: 'file',
@@ -139,10 +137,10 @@ describe('AIOS Memory & RAG Pipeline Tests', () => {
       await client.add(record);
 
       expect(mockFetch).toHaveBeenCalled();
-      expect(mockRequestFn).toHaveBeenCalledTimes(1);
-      expect(mockRequestFn.mock.calls[0][0].path).toBe('/collections/{collection_name}/points');
-      expect(mockRequestFn.mock.calls[0][0].method).toBe('PUT');
-      expect(mockRequestFn.mock.calls[0][0].body).toEqual({
+      expect(mockRequestFn).toHaveBeenCalledTimes(2);
+      expect(mockRequestFn.mock.calls[1][0].path).toBe('/collections/{collection_name}/points');
+      expect(mockRequestFn.mock.calls[1][0].method).toBe('PUT');
+      expect(mockRequestFn.mock.calls[1][0].body).toEqual({
         points: [
           {
             id: record.id,
@@ -165,31 +163,31 @@ describe('AIOS Memory & RAG Pipeline Tests', () => {
         json: async () => ({ embedding: new Array(384).fill(0.1) })
       });
       
-      mockRequestFn.mockResolvedValueOnce({
-        data: {
-          result: [
-            {
-              id: 'test-uuid-1',
-              payload: {
-                type: 'file',
-                content: 'Found text',
-                metadata: { path: 'C:\\test.txt' },
-                createdAt: 1000,
-                updatedAt: 1000
-              }
-            }
-          ]
+      // Mock getCollection for init()
+      mockRequestFn.mockResolvedValueOnce({ data: { result: { status: 'green' } } });
+      // Mock search response
+      mockRequestFn.mockResolvedValueOnce([
+        {
+          id: 'test-uuid-1',
+          payload: {
+            type: 'file',
+            content: 'Found text',
+            metadata: { path: 'C:\\test.txt' },
+            createdAt: 1000,
+            updatedAt: 1000
+          }
         }
-      });
+      ]);
 
       const client = new MemoryClient();
+      await client.init();
       const results = await client.search({ query: 'Search test term', limit: 5 });
 
       expect(results.length).toBe(1);
       expect(results[0].content).toBe('Found text');
-      expect(mockRequestFn.mock.calls[0][0].path).toBe('/collections/{collection_name}/points/search');
-      expect(mockRequestFn.mock.calls[0][0].method).toBe('POST');
-      expect(mockRequestFn.mock.calls[0][0].body).toEqual({
+      expect(mockRequestFn.mock.calls[1][0].path).toBe('/collections/{collection_name}/points/search');
+      expect(mockRequestFn.mock.calls[1][0].method).toBe('POST');
+      expect(mockRequestFn.mock.calls[1][0].body).toEqual({
         vector: expect.any(Array),
         filter: undefined,
         limit: 5,

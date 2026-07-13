@@ -73,13 +73,32 @@ export class GuardRail {
     return RiskLevel.LOW;
   }
 
+  private agentPermissions: Record<string, string[]> = {
+    'planner': ['fs:read', 'web:search', 'memory:read', 'memory:write', 'browser:read', 'workflow:manage'],
+    'researcher': ['fs:read', 'web:search', 'memory:read', 'memory:write', 'browser:read'],
+    'coder': ['fs:read', 'fs:write', 'shell:run', 'computer_run_shell', 'memory:read', 'memory:write'],
+    'reviewer': ['fs:read', 'memory:read', 'memory:write']
+  };
+
   private isAgentPermitted(agentId: string, action: string): boolean {
+    // Least Privilege Access
+    const allowedActions = this.agentPermissions[agentId];
+    if (!allowedActions) {
+      // Fallback for unknown agents - strict deny by default
+      return false;
+    }
+    
     const act = action.split(':')[0];
     
-    if (agentId === 'planner' || agentId === 'researcher') {
-      if (act === 'shell' || act === 'computer_run_shell') return false;
+    if (allowedActions.includes(action) || allowedActions.includes(`${act}:*`)) {
+      return true;
     }
-    return true;
+    
+    if ((action === 'shell:run' || action === 'computer_run_shell') && allowedActions.includes('shell:run')) {
+      return true;
+    }
+    
+    return false;
   }
 
   private createAudit(request: ApprovalRequest, decision: 'allow' | 'deny' | 'timeout', reason: string): AuditLogEntry {

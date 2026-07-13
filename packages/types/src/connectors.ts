@@ -14,7 +14,7 @@ export interface IngestionPayload {
 export interface IConnector {
   id: string;
   name: string;
-  start(): Promise<void>;
+  start(onData: (payload: IngestionPayload) => Promise<void>, signal?: AbortSignal): Promise<void>;
   stop(): Promise<void>;
   status(): 'active' | 'inactive' | 'error';
 }

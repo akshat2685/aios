@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "examples": [
+    {
+      "input": "Sample input",
+      "expected_output": "Sample output",
+      "expected_tools": [],
+      "expected_model": "gemini-3.1-pro",
+      "max_latency_ms": 3000,
+      "max_cost": 0.02
+    }
+  ]
+}

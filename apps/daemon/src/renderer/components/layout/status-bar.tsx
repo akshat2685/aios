@@ -19,7 +19,7 @@ export function StatusBar() {
         setMetrics({
           cpu: sys ? Math.round(sys.cpuUsage) : 0,
           workflows: workflows.length,
-          plugins: plugins.filter(p => p.status === 'running').length,
+          plugins: plugins.filter((p: any) => p.status === 'running').length,
         });
       } catch (e) {}
     }, 5000);
@@ -27,27 +27,33 @@ export function StatusBar() {
   }, []);
 
   return (
-    <div className="h-8 glass-strong border-t border-glass-border flex items-center justify-between px-3 text-xs select-none z-20 shrink-0">
-      <div className="flex items-center gap-4 text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <div className={cn('w-2 h-2 rounded-full', ollamaStatus === 'online' ? 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-danger')} />
-          <span className="font-mono">{cloudMode === 'online' ? 'Gemini Active' : 'Ollama Local'}</span>
+    <div className="h-9 bg-black/40 backdrop-blur-2xl border-t border-white/5 flex items-center justify-between px-4 text-xs select-none z-20 shrink-0 shadow-[0_-4px_20px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center gap-6 text-white/50">
+        <div className="flex items-center gap-2">
+          <div className={cn('w-2 h-2 rounded-full shadow-lg', ollamaStatus === 'online' ? 'bg-success shadow-success/50' : 'bg-danger shadow-danger/50')} />
+          <span className="font-mono tracking-wider font-semibold text-white/70">{cloudMode === 'online' ? 'CLOUD / GEMINI' : 'LOCAL / OLLAMA'}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Activity size={12} />
-          <span className="font-mono">CPU {metrics.cpu}%</span>
+        <div className="flex items-center gap-2">
+          <Activity size={12} className={metrics.cpu > 80 ? "text-danger" : "text-white/40"} />
+          <span className="font-mono tracking-widest">CPU {metrics.cpu}%</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-muted-foreground">
-        <div className="flex items-center gap-1.5 hover:text-foreground cursor-default transition-colors">
+      <div className="flex items-center gap-6 text-white/50">
+        <motion.div 
+          whileHover={{ color: 'rgba(255,255,255,0.9)' }} 
+          className="flex items-center gap-2 cursor-pointer transition-colors"
+        >
           <Zap size={12} className={metrics.workflows > 0 ? "text-warning" : ""} />
-          <span className="font-mono">{metrics.workflows} Workflows</span>
-        </div>
-        <div className="flex items-center gap-1.5 hover:text-foreground cursor-default transition-colors">
+          <span className="font-mono tracking-widest">{metrics.workflows} WKF</span>
+        </motion.div>
+        <motion.div 
+          whileHover={{ color: 'rgba(255,255,255,0.9)' }} 
+          className="flex items-center gap-2 cursor-pointer transition-colors"
+        >
           <HardDrive size={12} className={metrics.plugins > 0 ? "text-accent" : ""} />
-          <span className="font-mono">{metrics.plugins} Plugins</span>
-        </div>
+          <span className="font-mono tracking-widest">{metrics.plugins} PLG</span>
+        </motion.div>
       </div>
     </div>
   );

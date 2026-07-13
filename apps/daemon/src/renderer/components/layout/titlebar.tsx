@@ -3,6 +3,7 @@ import { Minus, X, Cloud, Server } from 'lucide-react';
 import { getElectronAPI } from '@/lib/electron-api';
 import { useAppStore } from '@/stores/app-store';
 import { cn } from '@/lib/utils';
+import { GlassContainer } from '../ui/glass';
 
 export function Titlebar() {
   const api = getElectronAPI();
@@ -15,29 +16,29 @@ export function Titlebar() {
   };
 
   return (
-    <div className="h-[38px] bg-black/40 backdrop-blur-xl border-b border-glass-border flex items-center justify-between relative z-50 no-select">
+    <div className="h-[44px] bg-black/40 backdrop-blur-3xl border-b border-white/10 flex items-center justify-between relative z-50 no-select shadow-lg">
       <div className="flex-1 h-full drag-region flex items-center pl-4">
-        <span className="hud-text tracking-[0.15em] flex items-center gap-3">
-          <span>AIOS KERNEL // MODE:</span>
+        <span className="hud-text tracking-[0.2em] flex items-center gap-4">
+          <span className="text-white/70 font-bold">AIOS KERNEL // MODE:</span>
           
           <button 
             onClick={toggleMode}
-            className="no-drag relative flex items-center p-0.5 rounded-full bg-black/50 border border-white/10 overflow-hidden w-24 h-6 transition-all"
+            className="no-drag relative flex items-center p-0.5 rounded-full bg-black/60 border border-white/10 overflow-hidden w-28 h-7 transition-all shadow-inner cursor-pointer hover:border-white/20"
           >
             <motion.div
               layout
               className={cn(
-                "absolute inset-y-0.5 w-[calc(50%-2px)] rounded-full z-0",
-                cloudMode === 'local' ? "bg-green-500/20 border border-green-500/30 left-0.5" : "bg-purple-500/20 border border-purple-500/30 right-0.5"
+                "absolute inset-y-1 w-[calc(50%-4px)] rounded-full z-0 shadow-lg",
+                cloudMode === 'local' ? "bg-success border border-success left-1 shadow-success/40" : "bg-purple-500 border border-purple-500 right-1 shadow-purple-500/40"
               )}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
             />
-            <div className="relative z-10 flex w-full">
-              <div className={cn("flex-1 flex justify-center items-center gap-1 text-[9px] font-bold tracking-wider", cloudMode === 'local' ? "text-green-400" : "text-white/40")}>
+            <div className="relative z-10 flex w-full h-full">
+              <div className={cn("flex-1 flex justify-center items-center gap-1.5 text-[10px] font-extrabold tracking-widest transition-colors", cloudMode === 'local' ? "text-white" : "text-white/40")}>
                 <Server size={10} />
                 LCL
               </div>
-              <div className={cn("flex-1 flex justify-center items-center gap-1 text-[9px] font-bold tracking-wider", cloudMode === 'online' ? "text-purple-400" : "text-white/40")}>
+              <div className={cn("flex-1 flex justify-center items-center gap-1.5 text-[10px] font-extrabold tracking-widest transition-colors", cloudMode === 'online' ? "text-white" : "text-white/40")}>
                 <Cloud size={10} />
                 CLD
               </div>
@@ -45,24 +46,25 @@ export function Titlebar() {
           </button>
         </span>
       </div>
-      <div className="flex items-center no-drag">
+      
+      <div className="flex items-center h-full no-drag pr-2 gap-1">
         <motion.button
-          whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
+          whileTap={{ scale: 0.9 }}
           onClick={() => api.app.minimize()}
-          className="w-10 h-[38px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          className="w-10 h-8 rounded-lg flex items-center justify-center text-white/50 hover:text-white transition-colors"
           title="Minimize"
         >
-          <Minus size={14} />
+          <Minus size={16} />
         </motion.button>
         <motion.button
-          whileHover={{ scale: 1.1, backgroundColor: 'rgba(239,68,68,0.2)' }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ backgroundColor: 'rgba(239,68,68,0.2)' }}
+          whileTap={{ scale: 0.9 }}
           onClick={() => api.app.quit()}
-          className="w-10 h-[38px] flex items-center justify-center text-muted-foreground hover:text-danger transition-colors"
+          className="w-10 h-8 rounded-lg flex items-center justify-center text-white/50 hover:text-danger transition-colors"
           title="Close"
         >
-          <X size={14} />
+          <X size={16} />
         </motion.button>
       </div>
     </div>

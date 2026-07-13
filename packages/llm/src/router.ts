@@ -302,6 +302,8 @@ export class LLMRouter {
       classificationConfidence = classification.confidence;
     }
 
+    const taskComplexity = TaskClassifier.analyzeComplexity(request.prompt);
+
     const profile: RoutingProfile = this.config.routingProfile || 'BALANCED';
     const cloudMode: CloudMode = this.config.cloudMode || 'local';
     const routingMode: RoutingMode = this.config.routingMode || 'automatic';
@@ -359,8 +361,8 @@ export class LLMRouter {
       if (!this.isProviderAvailable(cap.providerId)) continue;
 
       // Cloud mode filtering
-      if (isLocalMode && !cap.isLocal) continue;
-      if (!isLocalMode && cap.isLocal) continue;
+      if (cloudMode === 'local' && !cap.isLocal) continue;
+      if (cloudMode === 'online' && cap.isLocal) continue;
 
       // User preference filtering
       if (userPrefs.disabledProviders?.includes(cap.providerId as LLMProviderId)) continue;
@@ -378,7 +380,31 @@ export class LLMRouter {
         totalErrors: 0
       };
 
-      const { score, penalties } = IntelligentScorer.score(cap, taskType, profile, health, userPrefs);
+      let { score, penalties } = IntelligentScorer.score(cap, taskType, profile, health, userPrefs);
+
+      // Implement task complexity routing
+      if (taskComplexity === 'simple') {
+        if (cap.isLocal || ['qwen', 'llama3', 'mistral'].some(m => cap.modelId.toLowerCase().includes(m))) {
+          score *= 1.5;
+        } else {
+          score *= 0.8;
+          penalties.push('Overpowered for simple task');
+        }
+      } else if (taskComplexity === 'complex') {
+        if (!cap.isLocal || ['claude', 'gpt', 'gemini-1.5-pro'].some(m => cap.modelId.toLowerCase().includes(m))) {
+          score *= 1.5;
+        } else {
+          score *= 0.5;
+          penalties.push('Underpowered for complex task');
+        }
+      } else if (taskComplexity === 'security') {
+        if (cap.isLocal || cap.modelId.toLowerCase().includes('security') || cap.modelId.toLowerCase().includes('guard')) {
+          score *= 2.0;
+        } else {
+          score *= 0.2;
+          penalties.push('Security risk with non-specialized cloud model');
+        }
+      }
 
       allScores.push({
         providerId: cap.providerId,

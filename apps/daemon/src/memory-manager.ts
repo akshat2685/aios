@@ -1,52 +1,52 @@
 import { ConfigManager } from '@aios/config';
-import { MemoryService, CoreLogger } from '@aios/core';
-import { MemoryRecord } from '@aios/memory';
+import { CoreLogger } from '@aios/core';
+import { MemoryClient, MemoryRecord } from '@aios/memory';
 
 export class MemoryManager {
-  private memoryService: MemoryService;
+  private memoryClient: MemoryClient;
   private config: any;
   private logger!: any;
 
   constructor() {
     this.config = ConfigManager.get('memory');
-    this.memoryService = new MemoryService();
+    this.memoryClient = new MemoryClient();
   }
 
   async init(): Promise<void> {
-    await this.memoryService.init();
+    await this.memoryClient.init();
     this.logger.info('Memory manager initialized');
   }
 
   async addRecord(record: MemoryRecord): Promise<void> {
-    await this.memoryService.addRecord(record);
+    await this.memoryClient.add(record);
   }
 
   async searchMemory(options: any): Promise<MemoryRecord[]> {
-    return this.memoryService.searchMemory(options);
+    return this.memoryClient.search(options);
   }
 
   async addMany(records: MemoryRecord[]): Promise<void> {
-    await this.memoryService.addMany(records);
+    await this.memoryClient.addMany(records);
   }
 
   async updateRecord(recordId: string, updates: any): Promise<void> {
-    await this.memoryService.updateRecord(recordId, updates);
+    await this.memoryClient.update(recordId, updates);
   }
 
   async deleteRecord(recordId: string): Promise<void> {
-    await this.memoryService.deleteRecord(recordId);
+    await this.memoryClient.delete(recordId);
   }
 
   async getById(recordId: string): Promise<MemoryRecord | null> {
-    return this.memoryService.getById(recordId);
+    return this.memoryClient.getById(recordId);
   }
 
   async getStats(): Promise<Record<string, any>> {
-    return this.memoryService.getStats();
+    return this.memoryClient.getStats();
   }
 
   async clear(): Promise<void> {
-    await this.memoryService.clear();
+    await this.memoryClient.clear();
   }
 
   private initLogger() {

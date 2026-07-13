@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { getElectronAPI } from '@/lib/electron-api';
 import { cn } from '@/lib/utils';
+import { useAppStore } from '@/stores/app-store';
 
 const CATEGORIES = [
   { id: 'project', label: 'Projects', icon: FolderDot },

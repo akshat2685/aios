@@ -1,8 +1,9 @@
-import { CoreLogger, MemoryService } from '@aios/core';
+import { CoreLogger, MemoryOperations, DocumentPipeline, MemoryStoragePostprocessor } from '@aios/core';
+import { MemoryClient } from '@aios/memory';
 import { LLMRouter } from '@aios/llm';
 import { OllamaProvider } from '@aios/llm';
 import { AgentOrchestrator } from '@aios/agents';
-import { ConnectorManager } from '@aios/connectors';
+import { ConnectorMediator } from '@aios/connectors';
 import { FileSystemConnector } from '@aios/connectors';
 import { AutomationEngine } from '@aios/automation';
 import { GitService, CodeAnalyzer } from '@aios/devtools';
@@ -20,12 +21,14 @@ export class AIOSKernel {
   public logger: CoreLogger;
   public router: LLMRouter;
   public agents: AgentOrchestrator;
-  public connectors: ConnectorManager;
+  public connectors: ConnectorMediator;
   public automation: AutomationEngine;
   public research: ResearchService;
   public git: GitService;
   public analyzer: CodeAnalyzer;
-  public memory: MemoryService;
+  public memoryClient: MemoryClient;
+  public memory: MemoryOperations;
+  public ingester: DocumentPipeline;
   public graph: GraphService;
   public security: SecretManager;
   public plugins: PluginManager;
@@ -53,7 +56,11 @@ export class AIOSKernel {
     }, this.approvalCallback);
 
     this.router = new LLMRouter(config, this.security, logger);
-    this.memory = new MemoryService();
+    this.memoryClient = new MemoryClient();
+    this.memory = new MemoryOperations(this.memoryClient);
+    this.ingester = new DocumentPipeline(this.memoryClient);
+    this.ingester.addPostprocessor(new MemoryStoragePostprocessor(this.memoryClient, this.ingester));
+
     this.graph = new GraphService(logger);
     this.graph.init().catch((e: any) => logger.error(`Failed to initialize Graph Schema: ${e}`));
 
@@ -74,7 +81,7 @@ export class AIOSKernel {
       this.memory
     );
 
-    this.connectors = new ConnectorManager(logger);
+    this.connectors = new ConnectorMediator(logger, this.ingester);
     
     const ingestionConfig = ConfigManager.get('memoryIngestion') || {};
     const fileWatcherConfig = ingestionConfig.fileWatcher || {};
@@ -82,16 +89,7 @@ export class AIOSKernel {
 
     if (watchPaths.length > 0) {
       this.connectors.registerConnector(new FileSystemConnector({
-        watchPaths,
-        onIngest: async (payload) => {
-          this.logger.debug(`Kernel received ingestion: ${payload.metadata.path || payload.source}`);
-          try {
-            await this.memory.ingest(payload);
-            await this.automation.triggerEvent('file:added', payload);
-          } catch (e: any) {
-            this.logger.error(`Kernel ingestion routing failed: ${e.message}`);
-          }
-        }
+        watchPaths
       }, logger));
     } else {
       this.logger.info('No watched paths configured for file system ingestion.');
@@ -109,7 +107,7 @@ export class AIOSKernel {
       this.logger.info('AIOS Kernel Booting...');
       
       try {
-        await this.memory.initialize();
+        await this.memoryClient.init();
       } catch (memError: any) {
         this.logger.warn(`Memory Service initialization failed: ${memError.message}. Vector database might be offline.`);
       }

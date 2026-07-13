@@ -24,6 +24,14 @@ let kernel: AIOSKernel | null = null;
 let tray: any = null;
 let launcherWindow: BrowserWindow | null = null;
 
+function hardenWindow(window: BrowserWindow) {
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.on('will-navigate', (event) => event.preventDefault());
+  window.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+}
+
 async function createApplication() {
   // 1. Setup Crash Reporting
   setupCrashReporter();
@@ -113,14 +121,18 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      devTools: isDev,
     },
   });
+  hardenWindow(mainWindow);
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
   // 6. Initialize System Tray (requires mainWindow)
@@ -155,8 +167,13 @@ function createLauncherWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      devTools: isDev,
     },
   });
+  hardenWindow(launcherWindow);
 
   if (isDev) {
     launcherWindow.loadURL('http://localhost:3000/#/overlay');

@@ -22,28 +22,33 @@ export class SkillRegistry {
   }
 
   /**
-   * Scans the workspace for installed skills (under .agents/skills)
+   * Scans the workspace for installed skills (under .agents/skills and packages/skills)
    */
   async discoverSkills(): Promise<void> {
-    const skillsDir = path.join(this.workspacePath, '.agents', 'skills');
-    
-    try {
-      const exists = await fs.access(skillsDir).then(() => true).catch(() => false);
-      if (!exists) {
-        this.logger.info(`Skills directory not found at ${skillsDir}, skipping skill discovery.`);
-        return;
-      }
+    const locations = [
+      path.join(this.workspacePath, '.agents', 'skills'),
+      path.join(this.workspacePath, 'packages', 'skills')
+    ];
 
-      const entries = await fs.readdir(skillsDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          await this.loadSkill(path.join(skillsDir, entry.name), entry.name);
+    for (const skillsDir of locations) {
+      try {
+        const exists = await fs.access(skillsDir).then(() => true).catch(() => false);
+        if (!exists) {
+          this.logger.info(`Skills directory not found at ${skillsDir}, skipping.`);
+          continue;
         }
+
+        const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            await this.loadSkill(path.join(skillsDir, entry.name), entry.name);
+          }
+        }
+        
+        this.logger.info(`Loaded skills from ${skillsDir}. Total skills so far: ${this.skills.size}`);
+      } catch (error) {
+        this.logger.error(`Error discovering skills in ${skillsDir}: ${error}`);
       }
-      
-      this.logger.info(`Loaded ${this.skills.size} agent skills from ${skillsDir}`);
-    } catch (error) {
-      this.logger.error(`Error discovering skills: ${error}`);
     }
   }
 

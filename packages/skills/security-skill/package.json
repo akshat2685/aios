@@ -1,0 +1,6 @@
+{
+  "name": "@aios/security-skill",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "Basic plugin for security-skill"
+}
