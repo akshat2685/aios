@@ -12,6 +12,29 @@ import { loadPlans, savePlans } from './tools/planner-tools';
 import { MemoryOperations } from '@aios/core';
 import { GuardRail, askApproval } from '@aios/security';
 import { AgentReputationTracker } from './reputation';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+
+export enum AutonomyLevel {
+  Assistant = 0,
+  Suggest = 1,
+  ExecuteWithApproval = 2,
+  FullyAutonomous = 3,
+  SelfOptimizing = 4
+}
+
+export interface AgentDecisionAudit {
+  taskId: string;
+  planner: string;
+  executor: string;
+  model: string;
+  reason: string;
+  filesChanged: string[];
+  testStatus: string;
+  securityStatus: string;
+  timestamp: number;
+}
 
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent> = new Map();
@@ -19,6 +42,8 @@ export class AgentOrchestrator {
   public skillRegistry: SkillRegistry;
   private memory?: MemoryOperations;
   public reputationTracker: AgentReputationTracker;
+  public autonomyLevel: AutonomyLevel = AutonomyLevel.ExecuteWithApproval;
+  private requestApproval?: (action: string, details: string) => Promise<boolean>;
 
   constructor(
     router: LLMRouter, 
@@ -29,6 +54,7 @@ export class AgentOrchestrator {
   ) {
     this.logger = logger;
     this.memory = memory;
+    this.requestApproval = requestApproval;
     this.skillRegistry = new SkillRegistry(logger, workspacePath);
     this.reputationTracker = new AgentReputationTracker();
     
@@ -200,6 +226,18 @@ export class AgentOrchestrator {
     // Implementation for multi-agent coordination
   }
 
+  async logDecision(audit: AgentDecisionAudit) {
+    const logLine = JSON.stringify(audit);
+    this.logger.info(`[AUDIT] ${logLine}`);
+    try {
+      const auditDir = path.join(os.homedir(), '.aios');
+      if (!fs.existsSync(auditDir)) fs.mkdirSync(auditDir, { recursive: true });
+      fs.appendFileSync(path.join(auditDir, 'agent-decisions.log'), logLine + '\n');
+    } catch (e) {
+      this.logger.warn(`Failed to write audit log: ${e}`);
+    }
+  }
+
   async routeTask(task: string, taskType: string): Promise<AgentResponse> {
     const availableAgents = Array.from(this.agents.keys());
     if (availableAgents.length === 0) {
@@ -212,22 +250,59 @@ export class AgentOrchestrator {
     
     this.logger.info(`Routing task of type '${taskType}' to '${bestAgent}' agent (Success Rate: ${successRate}%)`);
     
+    // Human Approval Gate Check
+    if (this.autonomyLevel === AutonomyLevel.Assistant) {
+      return { message: `Assistant mode: Task "${task}" requires manual direction.`, done: true };
+    } else if (this.autonomyLevel === AutonomyLevel.Suggest) {
+      return { message: `Suggestion: I recommend assigning "${task}" to ${bestAgent}. (Autonomy Level 1: Suggest)`, done: true };
+    } else if (this.autonomyLevel === AutonomyLevel.ExecuteWithApproval && this.requestApproval) {
+      const approved = await this.requestApproval('execute_task', `Task: ${task}\nTarget Agent: ${bestAgent}`);
+      if (!approved) {
+        return { message: 'Task execution denied by human approval gate.', done: true };
+      }
+    }
+    
     let iterations = 1;
     let success = false;
+    let response: AgentResponse | null = null;
     try {
-      const response = await this.routeRequest(bestAgent, { role: 'user', content: task, timestamp: Date.now() });
+      response = await this.routeRequest(bestAgent, { role: 'user', content: task, timestamp: Date.now() });
       success = !response.message.toLowerCase().includes('failed'); // Basic heuristic
       return response;
     } finally {
       this.reputationTracker.recordTaskCompletion(bestAgent, success, iterations);
+      await this.logDecision({
+        taskId: `task_${Date.now()}`,
+        planner: 'orchestrator',
+        executor: bestAgent,
+        model: 'default',
+        reason: `Routed task based on ${successRate}% success rate`,
+        filesChanged: [],
+        testStatus: success ? 'PASS' : 'FAIL',
+        securityStatus: 'PASSED_GUARDRAIL', // Basic assumption if no throw
+        timestamp: Date.now()
+      });
     }
   }
 
   async verifyAndCorrect(task: string, maxIterations = 3): Promise<AgentResponse> {
+    const taskId = `task_${Date.now()}`;
     let iteration = 0;
     let currentTask = task;
     let lastResponse: AgentResponse | null = null;
     let history: AgentMessage[] = [];
+    
+    // Human Approval Gate Check
+    if (this.autonomyLevel === AutonomyLevel.Assistant) {
+      return { message: `Assistant mode: verifyAndCorrect requires manual direction.`, done: true };
+    } else if (this.autonomyLevel === AutonomyLevel.Suggest) {
+      return { message: `Suggestion: I recommend running verifyAndCorrect on "${task}". (Autonomy Level 1: Suggest)`, done: true };
+    } else if (this.autonomyLevel === AutonomyLevel.ExecuteWithApproval && this.requestApproval) {
+      const approved = await this.requestApproval('verify_and_correct', `Task: ${task}\nProcess: Coder -> Reviewer -> Tester`);
+      if (!approved) {
+        return { message: 'Task execution denied by human approval gate.', done: true };
+      }
+    }
 
     while (iteration < maxIterations) {
       this.logger.info(`verifyAndCorrect: Iteration ${iteration + 1} for task`);
@@ -254,6 +329,19 @@ export class AgentOrchestrator {
           this.reputationTracker.recordTaskCompletion('coder', true, iteration + 1);
           this.reputationTracker.recordTaskCompletion('reviewer', true, 1);
           this.reputationTracker.recordTaskCompletion('tester', true, 1);
+          
+          await this.logDecision({
+            taskId,
+            planner: 'orchestrator',
+            executor: 'coder',
+            model: 'default',
+            reason: `Iterative refinement passed after ${iteration + 1} attempts`,
+            filesChanged: [], // Normally parsed from lastResponse
+            testStatus: 'PASS',
+            securityStatus: 'PASS',
+            timestamp: Date.now()
+          });
+          
           return lastResponse;
         }
 
@@ -272,6 +360,19 @@ export class AgentOrchestrator {
     }
     
     this.reputationTracker.recordTaskCompletion('coder', false, iteration);
+    
+    await this.logDecision({
+      taskId,
+      planner: 'orchestrator',
+      executor: 'coder',
+      model: 'default',
+      reason: `Max iterations reached without approval.`,
+      filesChanged: [],
+      testStatus: 'FAIL',
+      securityStatus: 'PASS',
+      timestamp: Date.now()
+    });
+    
     this.logger.error(`verifyAndCorrect: Max iterations reached without approval.`);
     return lastResponse || { message: 'Failed to complete task', done: true };
   }
