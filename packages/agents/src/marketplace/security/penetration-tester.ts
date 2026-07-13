@@ -16,7 +16,8 @@ export class PenetrationTestingAgent extends BaseAgent {
           targetIp: { type: 'string', description: 'IP or hostname to scan' }
         },
         required: ['targetIp']
-      }
+      },
+      execute: async () => 'mock result'
     });
 
     this.registerTool({
@@ -29,7 +30,8 @@ export class PenetrationTestingAgent extends BaseAgent {
           exploitId: { type: 'string', description: 'Exploit module to use' }
         },
         required: ['target', 'exploitId']
-      }
+      },
+      execute: async () => 'mock result'
     });
     
     this.registerTool({
@@ -41,7 +43,8 @@ export class PenetrationTestingAgent extends BaseAgent {
           targetUrl: { type: 'string', description: 'URL of the web application' }
         },
         required: ['targetUrl']
-      }
+      },
+      execute: async () => 'mock result'
     });
   }
 

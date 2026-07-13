@@ -16,7 +16,8 @@ export class SecurityAuditorAgent extends BaseAgent {
           targetDirectory: { type: 'string', description: 'Directory to scan' }
         },
         required: ['targetDirectory']
-      }
+      },
+      execute: async () => 'mock result'
     });
 
     this.registerTool({
@@ -28,7 +29,8 @@ export class SecurityAuditorAgent extends BaseAgent {
           manifestFile: { type: 'string', description: 'Path to package.json or similar manifest' }
         },
         required: ['manifestFile']
-      }
+      },
+      execute: async () => 'mock result'
     });
     
     this.registerTool({
@@ -41,7 +43,8 @@ export class SecurityAuditorAgent extends BaseAgent {
           standard: { type: 'string', description: 'Standard to check against' }
         },
         required: ['targetDirectory', 'standard']
-      }
+      },
+      execute: async () => 'mock result'
     });
   }
 
