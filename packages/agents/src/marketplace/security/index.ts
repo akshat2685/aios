@@ -1,2 +1,2 @@
-export * from './security-auditor';
-export * from './penetration-tester';
+export { SecurityAuditorAgent } from './security-auditor';
+export { PenetrationTestingAgent } from './penetration-tester';

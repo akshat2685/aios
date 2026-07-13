@@ -1,2 +1,2 @@
-export * from './react-expert';
-export * from './ml-engineer';
+export { ReactExpertAgent } from './react-expert';
+export { MLEngineerAgent } from './ml-engineer';
