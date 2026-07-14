@@ -1,40 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "@aios/ui/styles/theme.css";
 @import "tailwindcss";
 
-/* ============================================================
-   AIOS LIQUID GLASS DESIGN SYSTEM
-   40% Apple Liquid Glass + 30% Jarvis HUD + 20% Arc Browser + 10% Cyberpunk
-   ============================================================ */
-
 @layer base {
-  :root {
-    --bg-primary: #09090B;
-    --bg-secondary: #0F0F12;
-    --glass-bg: rgba(255, 255, 255, 0.04);
-    --glass-bg-strong: rgba(255, 255, 255, 0.08);
-    --glass-bg-hover: rgba(255, 255, 255, 0.06);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-border-hover: rgba(255, 255, 255, 0.12);
-    --glass-border-focus: rgba(59, 130, 246, 0.4);
-    --accent: #3B82F6;
-    --accent-dim: rgba(59, 130, 246, 0.15);
-    --secondary: #8B5CF6;
-    --secondary-dim: rgba(139, 92, 246, 0.15);
-    --success: #22C55E;
-    --success-dim: rgba(34, 197, 94, 0.15);
-    --warning: #F59E0B;
-    --warning-dim: rgba(245, 158, 11, 0.15);
-    --danger: #EF4444;
-    --danger-dim: rgba(239, 68, 68, 0.15);
-    --text-primary: #F4F4F5;
-    --text-secondary: rgba(244, 244, 245, 0.6);
-    --text-muted: rgba(244, 244, 245, 0.4);
-    --text-ghost: rgba(244, 244, 245, 0.2);
-    --radius: 16px;
-    --radius-sm: 12px;
-    --radius-xs: 8px;
-  }
-
   * {
     box-sizing: border-box;
     margin: 0;
@@ -56,76 +24,6 @@
   ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 999px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
   ::selection { background: rgba(59, 130, 246, 0.3); color: #fff; }
-}
-
-/* ─── Glass Panels ──────────────────────────────────────────── */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(30px) saturate(1.2);
-  -webkit-backdrop-filter: blur(30px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  border-radius: var(--radius);
-}
-
-.glass-strong {
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(40px) saturate(1.4);
-  -webkit-backdrop-filter: blur(40px) saturate(1.4);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  border-radius: var(--radius);
-}
-
-.glass-subtle {
-  background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius);
-}
-
-.glass-interactive {
-  background: var(--glass-bg);
-  backdrop-filter: blur(30px) saturate(1.2);
-  -webkit-backdrop-filter: blur(30px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.glass-interactive:hover {
-  background: var(--glass-bg-hover);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-/* ─── Status Dots ───────────────────────────────────────────── */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-}
-.status-dot.online {
-  background: var(--success);
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-}
-.status-dot.offline {
-  background: var(--danger);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
-}
-.status-dot.thinking {
-  background: var(--warning);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
-  animation: pulse-glow 1.5s ease-in-out infinite;
-}
-
-/* ─── HUD Text ──────────────────────────────────────────────── */
-.hud-text {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 /* ─── Ambient Gradients ─────────────────────────────────────── */
@@ -155,34 +53,7 @@
   left: -100px;
 }
 
-/* ─── Gradient Text ─────────────────────────────────────────── */
-.text-gradient-accent {
-  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
 /* ─── Window Controls ───────────────────────────────────────── */
 .no-select { user-select: none; -webkit-user-select: none; }
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
-
-/* ─── Glass Border Utilities ────────────────────────────────── */
-.border-glass-border { border-color: var(--glass-border); }
-.bg-glass { background: var(--glass-bg); }
-.bg-glass-strong { background: var(--glass-bg-strong); }
-
-/* ─── Shadow Utilities ──────────────────────────────────────── */
-.shadow-accent-glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
-.shadow-purple-glow { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
-
-/* ─── Animations ────────────────────────────────────────────── */
-@keyframes pulse-glow {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
-}

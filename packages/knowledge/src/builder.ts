@@ -83,17 +83,106 @@ export class GraphBuilder {
       return { nodes: [], edges: [] };
     }
 
-    // 2. Assemble context by expanding graph around seed nodes (1 hop)
-    const placeholders = seedNodeIds.map(() => '?').join(',');
+    // 2. Assemble context using Spreading Activation (Personalized PageRank)
+    let currentFrontier = new Set<string>(seedNodeIds);
+    const expandedNodes = new Set<string>(seedNodeIds);
+    const expandedEdges = new Map<string, any>();
     
-    const nodesRawResult = this.db.query("SELECT * FROM graph_nodes WHERE id IN (" + placeholders + ")", seedNodeIds);
-    const edgesRawResult = this.db.query("SELECT * FROM graph_edges WHERE source_id IN (" + placeholders + ") OR target_id IN (" + placeholders + ")", [...seedNodeIds, ...seedNodeIds]);
+    // Expand up to 2 hops to fetch a local subgraph from SQLite
+    for (let hop = 0; hop < 2; hop++) {
+      if (currentFrontier.size === 0) break;
+      const placeholders = Array.from(currentFrontier).map(() => '?').join(',');
+      const edgesResult = this.db.query(
+        `SELECT * FROM graph_edges WHERE source_id IN (${placeholders}) OR target_id IN (${placeholders})`,
+        [...Array.from(currentFrontier), ...Array.from(currentFrontier)]
+      );
+      const edgesRaw = this.parseSqlResult(edgesResult as any[]);
+      
+      currentFrontier = new Set<string>();
+      for (const e of edgesRaw) {
+        if (!expandedEdges.has(e.id)) {
+          expandedEdges.set(e.id, e);
+          if (!expandedNodes.has(e.source_id)) {
+            expandedNodes.add(e.source_id);
+            currentFrontier.add(e.source_id);
+          }
+          if (!expandedNodes.has(e.target_id)) {
+            expandedNodes.add(e.target_id);
+            currentFrontier.add(e.target_id);
+          }
+        }
+      }
+    }
     
+    const nodeIdsArray = Array.from(expandedNodes);
+    const nodePlaceholders = nodeIdsArray.map(() => '?').join(',');
+    const nodesRawResult = this.db.query(
+      `SELECT * FROM graph_nodes WHERE id IN (${nodePlaceholders})`,
+      nodeIdsArray
+    );
     const nodesRaw = this.parseSqlResult(nodesRawResult as any[]);
-    const edgesRaw = this.parseSqlResult(edgesRawResult as any[]);
+    
+    // Spreading Activation Algorithm
+    const activations = new Map<string, number>();
+    const degrees = new Map<string, number>();
+    const adjList = new Map<string, string[]>();
+    
+    for (const id of nodeIdsArray) {
+      activations.set(id, seedNodeIds.includes(id) ? 1.0 / seedNodeIds.length : 0);
+      degrees.set(id, 0);
+      adjList.set(id, []);
+    }
+    
+    for (const e of expandedEdges.values()) {
+      degrees.set(e.source_id, (degrees.get(e.source_id) || 0) + 1);
+      degrees.set(e.target_id, (degrees.get(e.target_id) || 0) + 1);
+      adjList.get(e.source_id)!.push(e.target_id);
+      adjList.get(e.target_id)!.push(e.source_id); // Undirected spread for context
+    }
+    
+    const ALPHA = 0.85;
+    const ITERATIONS = 10;
+    
+    for (let i = 0; i < ITERATIONS; i++) {
+      const nextActivations = new Map<string, number>();
+      for (const id of nodeIdsArray) nextActivations.set(id, 0);
+      
+      for (const id of nodeIdsArray) {
+        const currentAct = activations.get(id) || 0;
+        if (currentAct > 0) {
+          const deg = degrees.get(id) || 1;
+          const spread = (currentAct * ALPHA) / deg;
+          for (const neighbor of adjList.get(id)!) {
+            nextActivations.set(neighbor, (nextActivations.get(neighbor) || 0) + spread);
+          }
+        }
+      }
+      
+      for (const seedId of seedNodeIds) {
+        nextActivations.set(seedId, (nextActivations.get(seedId) || 0) + ((1 - ALPHA) / seedNodeIds.length));
+      }
+      
+      for (const id of nodeIdsArray) {
+        activations.set(id, nextActivations.get(id)!);
+      }
+    }
+    
+    // Take top nodes by activation score
+    const MAX_CONTEXT_NODES = Math.max(limit * 3, 20);
+    const topNodeIds = new Set(
+      Array.from(activations.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, MAX_CONTEXT_NODES)
+        .map(entry => entry[0])
+    );
+    
+    const finalNodesRaw = nodesRaw.filter((n: any) => topNodeIds.has(n.id));
+    const finalEdgesRaw = Array.from(expandedEdges.values()).filter(
+      (e: any) => topNodeIds.has(e.source_id) && topNodeIds.has(e.target_id)
+    );
     
     // 3. Map back to types
-    const nodes: GraphNode[] = nodesRaw.map((n: any) => ({
+    const nodes: GraphNode[] = finalNodesRaw.map((n: any) => ({
       id: n.id,
       type: n.type,
       label: n.label,
@@ -101,7 +190,7 @@ export class GraphBuilder {
       timestamp: n.timestamp
     }));
     
-    const edges: GraphEdge[] = edgesRaw.map((e: any) => ({
+    const edges: GraphEdge[] = finalEdgesRaw.map((e: any) => ({
       id: e.id,
       sourceId: e.source_id,
       targetId: e.target_id,

@@ -29,7 +29,6 @@ jobs:
 
     - name: Lint codebase
       run: npm run lint
-      continue-on-error: true
 
     - name: Build packages
       run: npm run build:packages

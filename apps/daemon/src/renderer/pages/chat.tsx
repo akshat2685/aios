@@ -48,6 +48,7 @@ function CodeBlock({ children, className }: { children: string; className?: stri
         </div>
       )}
       <button
+        aria-label="Copy code"
         onClick={handleCopy}
         className="absolute top-2 right-2 p-1.5 rounded-lg bg-glass-strong border border-glass-border text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
       >
@@ -193,6 +194,7 @@ function ChatInput() {
       <div className="glass-strong rounded-2xl flex items-end gap-2 p-3">
         <textarea
           ref={textareaRef}
+          aria-label="Message input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -202,6 +204,7 @@ function ChatInput() {
           disabled={isStreaming}
         />
         <motion.button
+          aria-label="Send message"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleSubmit}
@@ -311,6 +314,7 @@ function ChatSidebar() {
               <span className="truncate flex-1">{conv.title}</span>
             </button>
             <button
+              aria-label="Delete conversation"
               onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger/20 hover:text-danger transition-all"
             >

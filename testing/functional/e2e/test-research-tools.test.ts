@@ -75,13 +75,10 @@ async function runResearchTests() {
   logger.info('Research tools verification complete!');
 }
 
-runResearchTests().catch(err => {
-  console.error('Test run failed:', err);
-  process.exit(1);
-});
+
 
 describe('E2E test-research-tools.test.ts', () => {
   it('should run tests', async () => {
-    await runTests();
+    await runResearchTests();
   }, { timeout: 30000 });
 });

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/app-store';
-import { GlassNavItem, GlassContainer } from '../ui/glass';
+import { GlassNavItem, GlassContainer } from '@aios/ui';
 
 const navItems = [
   { id: 'dashboard', path: '/', label: 'Home', icon: LayoutDashboard },

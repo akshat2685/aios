@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/124</span>
+                <span class='fraction'>0/125</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/124</span>
+                <span class='fraction'>0/125</span>
             </div>
         
             
@@ -186,7 +186,9 @@
 <a name='L121'></a><a href='#L121'>121</a>
 <a name='L122'></a><a href='#L122'>122</a>
 <a name='L123'></a><a href='#L123'>123</a>
-<a name='L124'></a><a href='#L124'>124</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -370,18 +372,18 @@
 <span class="cstat-no" title="statement not covered" >    return traverse(params);</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >  async executeAction(action: AutomationAction, context: WorkflowContext): Promise&lt;any&gt; {</span>
+<span class="cstat-no" title="statement not covered" >  async executeAction(action: AutomationAction, context: WorkflowContext, signal?: AbortSignal): Promise&lt;any&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    this.logger.info(`Executing action ${action.name} (${action.type})`);</span>
 <span class="cstat-no" title="statement not covered" >    </span>
 <span class="cstat-no" title="statement not covered" >    const params = await this.interpolateParams(action.params, context);</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    switch (action.type) {</span>
 <span class="cstat-no" title="statement not covered" >      case 'shell':</span>
-<span class="cstat-no" title="statement not covered" >        return await this.runShell(params.command);</span>
+<span class="cstat-no" title="statement not covered" >        return await this.runShell(params.command, signal);</span>
 <span class="cstat-no" title="statement not covered" >      case 'file':</span>
 <span class="cstat-no" title="statement not covered" >        return await this.runFileOp(params);</span>
 <span class="cstat-no" title="statement not covered" >      case 'api':</span>
-<span class="cstat-no" title="statement not covered" >        return await this.runApiCall(params);</span>
+<span class="cstat-no" title="statement not covered" >        return await this.runApiCall(params, signal);</span>
 <span class="cstat-no" title="statement not covered" >      case 'agent':</span>
 <span class="cstat-no" title="statement not covered" >        return { status: 'delegated', message: 'Action routed to agent', targetAgent: params.agentId, task: params.task };</span>
 <span class="cstat-no" title="statement not covered" >      case 'variable':</span>
@@ -394,9 +396,9 @@
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >  private async runShell(command: string): Promise&lt;any&gt; {</span>
+<span class="cstat-no" title="statement not covered" >  private async runShell(command: string, signal?: AbortSignal): Promise&lt;any&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-<span class="cstat-no" title="statement not covered" >      const { stdout, stderr } = await execPromise(command);</span>
+<span class="cstat-no" title="statement not covered" >      const { stdout, stderr } = await execPromise(command, { signal });</span>
 <span class="cstat-no" title="statement not covered" >      return { stdout, stderr };</span>
 <span class="cstat-no" title="statement not covered" >    } catch (error: any) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger.error(`Shell action failed: ${error.message}`);</span>
@@ -418,11 +420,12 @@
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >  private async runApiCall(params: { url: string, method: string, body?: any, headers?: any }): Promise&lt;any&gt; {</span>
+<span class="cstat-no" title="statement not covered" >  private async runApiCall(params: { url: string, method: string, body?: any, headers?: any }, signal?: AbortSignal): Promise&lt;any&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    const response = await fetch(params.url, {</span>
 <span class="cstat-no" title="statement not covered" >      method: params.method,</span>
 <span class="cstat-no" title="statement not covered" >      body: params.body ? (typeof params.body === 'string' ? params.body : JSON.stringify(params.body)) : undefined,</span>
 <span class="cstat-no" title="statement not covered" >      headers: { 'Content-Type': 'application/json', ...params.headers },</span>
+<span class="cstat-no" title="statement not covered" >      signal,</span>
 <span class="cstat-no" title="statement not covered" >    });</span>
 <span class="cstat-no" title="statement not covered" >    let data;</span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
@@ -439,7 +442,7 @@
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-07-08T09:56:43.326Z
+                at 2026-07-14T11:18:29.416Z
             </div>
         <script src="prettify.js"></script>
         <script>

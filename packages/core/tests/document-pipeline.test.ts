@@ -71,4 +71,41 @@ describe('DocumentPipeline', () => {
       pipeline.ingest('test-source', 'TEST CONTENT', {}, controller.signal)
     ).rejects.toThrow('Pipeline failed for test-source: Ingestion pipeline aborted');
   });
+
+  it('should call embeddingProvider and postprocessors when provided', async () => {
+    const mockEmbeddingProvider = {
+      name: 'TestEmbedder',
+      embed: vi.fn().mockResolvedValue(undefined)
+    };
+    const mockPostprocessor = {
+      name: 'TestPostprocessor',
+      process: vi.fn().mockResolvedValue(undefined)
+    };
+
+    pipeline.setEmbeddingProvider(mockEmbeddingProvider);
+    pipeline.addPostprocessor(mockPostprocessor);
+
+    await pipeline.ingest('source', 'content', {});
+
+    expect(mockEmbeddingProvider.embed).toHaveBeenCalledTimes(1);
+    expect(mockPostprocessor.process).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call chunker when setChunker is used', async () => {
+    const mockChunker = {
+      name: 'TestChunker',
+      chunk: vi.fn().mockResolvedValue(undefined)
+    };
+
+    pipeline.setChunker(mockChunker);
+
+    await pipeline.ingest('source', 'content', {});
+
+    expect(mockChunker.chunk).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle empty content resulting in 0 documentSizeBytes', async () => {
+    const docId = await pipeline.ingest('empty-source', '', {});
+    expect(docId).toBeDefined();
+  });
 });

@@ -289,7 +289,7 @@ Each object must have exactly two string fields:
           const llmReq: LLMRequest = {
             prompt: prompt,
             model: '',
-            systemPrompt: 'You are an AIOS internal component. Output raw JSON only.',
+            systemPrompt: 'You are an AIOS internal component. Output raw JSON only. Strictly adhere to the AIOS principles: Local-first execution, Enterprise Security, Zero Trust, Autonomous Software Engineering, high performance, low latency, and zero hallucinations.',
             priority: 1,
             taskType: 'REASONING'
           };

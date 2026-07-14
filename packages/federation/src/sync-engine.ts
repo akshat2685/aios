@@ -19,6 +19,11 @@ export class SyncEngine {
   private manifests: Map<string, SyncManifest> = new Map();
   private localVersionVector: Record<string, number> = {};
 
+  // Local state for CRDT
+  private localNodes: Map<string, GraphVizNode> = new Map();
+  private edgeAddSet: Map<string, GraphVizEdge> = new Map();
+  private edgeRemoveSet: Set<string> = new Set();
+
   constructor(
     logger: CoreLogger,
     discovery: PeerDiscovery,
@@ -54,23 +59,29 @@ export class SyncEngine {
 
     const manifest = this.manifests.get(peerId) || this.createEmptyManifest(peerId);
 
-    // Stub: In production, this would:
-    // 1. Compare local version vector with peer's version vector
-    // 2. Collect changed nodes/edges since manifest.lastSyncAt
-    // 3. Filter through sharing policy
-    // 4. Send changes via federation protocol
-    // 5. Receive and merge peer's changes using CRDT merge rules
-    // 6. Update manifest with new sync timestamp and version vector
+    // Compute differential changes since lastSyncAt
+    const nodesToSend = Array.from(this.localNodes.values()).filter(
+      (node) => node.lastAccessedAt > manifest.lastSyncAt && this.isNodeShareable(node)
+    );
 
+    const edgesToSend = Array.from(this.edgeAddSet.values()).filter(
+      (edge) => true // In a real system, we'd check edge timestamp if available
+    );
+
+    // Filter through sharing policy
+    // Send changes via federation protocol (Stubbed)
+    // Receive and merge peer's changes using CRDT merge rules (Stubbed)
+    
+    // Update manifest with new sync timestamp and version vector
     manifest.lastSyncAt = Date.now();
     this.manifests.set(peerId, manifest);
 
-    this.logger.info(`Sync completed with peer ${peerId}`);
+    this.logger.info(`Sync completed with peer ${peerId}. Sent ${nodesToSend.length} nodes and ${edgesToSend.length} edges.`);
 
     return {
-      nodesSent: 0,
+      nodesSent: nodesToSend.length,
       nodesReceived: 0,
-      edgesSent: 0,
+      edgesSent: edgesToSend.length,
       edgesReceived: 0,
     };
   }
@@ -90,17 +101,36 @@ export class SyncEngine {
     let conflicts = 0;
 
     for (const node of incoming) {
-      // Check sharing policy
       if (!this.isNodeShareable(node)) {
         rejected++;
         continue;
       }
 
-      // Stub: CRDT merge
-      // In production, compare timestamps and version vectors
-      // to determine which version wins
-      // For LWW-Register: newer timestamp wins
-      accepted++;
+      const existingNode = this.localNodes.get(node.id);
+      
+      // CRDT Last-Writer-Wins (LWW) based on lastAccessedAt or createdAt
+      if (!existingNode) {
+        this.localNodes.set(node.id, node);
+        accepted++;
+      } else {
+        const existingTs = existingNode.lastAccessedAt || existingNode.createdAt;
+        const incomingTs = node.lastAccessedAt || node.createdAt;
+        
+        if (incomingTs > existingTs) {
+          this.localNodes.set(node.id, node);
+          accepted++;
+        } else if (incomingTs === existingTs) {
+          // Tie-breaker based on ID lexicographical order
+          if (node.id > existingNode.id) {
+            this.localNodes.set(node.id, node);
+            accepted++;
+          } else {
+            conflicts++;
+          }
+        } else {
+          conflicts++; // Existing is newer, discard incoming
+        }
+      }
     }
 
     this.logger.debug(`Merge result: ${accepted} accepted, ${rejected} rejected, ${conflicts} conflicts`);
@@ -120,11 +150,35 @@ export class SyncEngine {
     let rejected = 0;
 
     for (const edge of incoming) {
-      // Stub: CRDT OR-Set merge (add-wins semantics)
-      accepted++;
+      // CRDT OR-Set (Observed-Remove Set) semantics
+      // Add-wins behavior: if it's in the remove set but we get a new add, 
+      // we remove it from remove set and add it, provided we have unique tags.
+      // Since we only have IDs, we simulate Add-Wins by always accepting the add 
+      // and clearing any local tombstone.
+      
+      if (!this.edgeAddSet.has(edge.id)) {
+        this.edgeAddSet.set(edge.id, edge);
+        this.edgeRemoveSet.delete(edge.id);
+        accepted++;
+      } else {
+        // Already exists, just update if we have a way to merge properties.
+        // For simple OR-Set, being in Add set means it's present.
+        this.edgeAddSet.set(edge.id, edge);
+        accepted++;
+      }
     }
 
     return { accepted, rejected };
+  }
+
+  /**
+   * Remove an edge using CRDT OR-Set semantics.
+   */
+  public removeEdge(edgeId: string): void {
+    if (this.edgeAddSet.has(edgeId)) {
+      this.edgeAddSet.delete(edgeId);
+    }
+    this.edgeRemoveSet.add(edgeId);
   }
 
   /**

@@ -122,6 +122,7 @@ export function AgentLauncher({ standalone = false }: AgentLauncherProps) {
       exit={{ opacity: 0, scale: 0.92, y: -20 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       onClick={(e) => e.stopPropagation()}
+      role="presentation"
       className={cn(
         'w-full max-w-[660px] overflow-hidden',
         standalone
@@ -149,6 +150,7 @@ export function AgentLauncher({ standalone = false }: AgentLauncherProps) {
           ref={inputRef}
           type="text"
           value={query}
+          aria-label="Search agents"
           onChange={(e) => {
             setQuery(e.target.value);
             setSelectedIndex(0);
@@ -160,7 +162,7 @@ export function AgentLauncher({ standalone = false }: AgentLauncherProps) {
           autoComplete="off"
         />
         {query && (
-          <button onClick={() => setQuery('')} className="text-[rgba(244,244,245,0.3)] hover:text-[rgba(244,244,245,0.6)] transition-colors">
+          <button aria-label="Clear search" onClick={() => setQuery('')} className="text-[rgba(244,244,245,0.3)] hover:text-[rgba(244,244,245,0.6)] transition-colors">
             <X size={14} />
           </button>
         )}
@@ -281,8 +283,9 @@ export function AgentLauncher({ standalone = false }: AgentLauncherProps) {
           transition={{ duration: 0.15 }}
           className="fixed inset-0 z-[9999] flex items-start justify-center pt-[12vh]"
           onClick={close}
+          role="presentation"
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />
           {content}
         </motion.div>
       )}

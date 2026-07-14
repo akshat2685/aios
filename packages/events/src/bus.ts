@@ -35,12 +35,14 @@ export class CoreEventBus {
     
     this.logger.debug(`Emitting event: ${type} to ${typeListeners.size} listeners`);
 
-    for (const listener of typeListeners) {
-      try {
-        await Promise.resolve(listener(event));
-      } catch (error: any) {
-        this.logger.error(`Error in event listener for ${type}: ${error.message}`);
-      }
-    }
+    await Promise.allSettled(
+      Array.from(typeListeners).map(async (listener) => {
+        try {
+          await Promise.resolve(listener(event));
+        } catch (error: any) {
+          this.logger.error(`Error in event listener for ${type}: ${error.message}`);
+        }
+      })
+    );
   }
 }

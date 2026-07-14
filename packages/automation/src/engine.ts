@@ -2,7 +2,8 @@ import cron from 'node-cron';
 import { CoreLogger } from '@aios/core';
 import { Workflow, WorkflowExecution, WorkflowStep, WorkflowContext, WorkflowCheckpoint } from '@aios/types';
 import { ActionLibrary } from './action-library';
-import { MemoryClient } from '@aios/memory';
+import { getDatabase, schema } from '@aios/graph';
+import { eq, or, and } from 'drizzle-orm';
 import { EventEmitter } from 'events';
 import { TriggerManager } from './trigger-manager';
 import { TriggerData } from '@aios/types';
@@ -12,7 +13,7 @@ export class AutomationEngine extends EventEmitter {
   private workflows: Map<string, Workflow> = new Map();
   private logger: CoreLogger;
   private actions: ActionLibrary;
-  private memoryClient: MemoryClient;
+  private db: ReturnType<typeof getDatabase>;
   private cancelledExecutions: Set<string> = new Set();
   private triggerManager: TriggerManager;
 
@@ -20,7 +21,7 @@ export class AutomationEngine extends EventEmitter {
     super();
     this.logger = logger;
     this.actions = new ActionLibrary(logger);
-    this.memoryClient = new MemoryClient();
+    this.db = getDatabase();
     this.triggerManager = new TriggerManager(
        logger, 
        this, // EventBus is Engine itself for now
@@ -33,32 +34,33 @@ export class AutomationEngine extends EventEmitter {
   }
 
   async init() {
-    this.logger.info('Initializing AutomationEngine and loading workflows from Memory (Qdrant)...');
+    this.logger.info('Initializing AutomationEngine and loading workflows from Postgres...');
     try {
-      await this.memoryClient.init();
       await this.loadWorkflowsFromMemory();
       await this.resumeCheckpoints();
     } catch (e: any) {
-      this.logger.error(`Failed to initialize memory client in AutomationEngine: ${e.message}`);
+      this.logger.error(`Failed to initialize Postgres in AutomationEngine: ${e.message}`);
     }
   }
 
   private async loadWorkflowsFromMemory() {
     try {
-      const records = await this.memoryClient.search({
-        query: 'workflow definition',
-        filter: { must: [{ key: 'type', match: { value: 'workflow' } }] },
-        limit: 1000,
-      });
+      const records = await this.db.select().from(schema.workflows);
 
-      this.logger.info(`Found ${records.length} workflows in memory.`);
+      this.logger.info(`Found ${records.length} workflows in Postgres.`);
       for (const record of records) {
-        if (record.metadata && record.metadata.workflow) {
-          const wf = record.metadata.workflow as Workflow;
-          this.workflows.set(wf.id, wf);
-          if (wf.isActive) {
-            this.triggerManager.registerWorkflowTriggers(wf);
-          }
+        const wf: Workflow = {
+          id: record.id,
+          name: record.name,
+          description: record.description || undefined,
+          isActive: record.isActive || false,
+          trigger: record.trigger as any,
+          steps: record.steps as any,
+          uiData: record.uiData as any
+        };
+        this.workflows.set(wf.id, wf);
+        if (wf.isActive) {
+          this.triggerManager.registerWorkflowTriggers(wf);
         }
       }
     } catch (error: any) {
@@ -68,23 +70,16 @@ export class AutomationEngine extends EventEmitter {
 
   private async resumeCheckpoints() {
     try {
-      const records = await this.memoryClient.search({
-        query: 'workflow checkpoint',
-        filter: { must: [{ key: 'type', match: { value: 'checkpoint' } }] },
-        limit: 100,
-      });
+      const records = await this.db.select().from(schema.workflowCheckpoints).where(
+         or(eq(schema.workflowCheckpoints.status, 'running'), eq(schema.workflowCheckpoints.status, 'pending'))
+      );
 
-      for (const record of records) {
-        if (record.metadata && record.metadata.checkpoint) {
-          const cp = record.metadata.checkpoint as WorkflowCheckpoint;
-          if (cp.status === 'running' || cp.status === 'pending') {
-            this.logger.info(`Resuming crashed execution ${cp.executionId} at step ${cp.currentStepId}`);
-            // Fire and forget
-            this.runStateMachine(cp.workflowId, cp.executionId, cp.currentStepId, cp.context).catch(e => {
-              this.logger.error(`Failed to resume execution ${cp.executionId}: ${e.message}`);
-            });
-          }
-        }
+      for (const cp of records) {
+        this.logger.info(`Resuming crashed execution ${cp.executionId} at step ${cp.currentStepId}`);
+        // Fire and forget
+        this.runStateMachine(cp.workflowId, cp.executionId, cp.currentStepId, cp.context as any).catch(e => {
+          this.logger.error(`Failed to resume execution ${cp.executionId}: ${e.message}`);
+        });
       }
     } catch (error: any) {
       this.logger.error(`Failed to load checkpoints: ${error.message}`);
@@ -96,18 +91,30 @@ export class AutomationEngine extends EventEmitter {
     this.logger.info(`Workflow registered: ${workflow.name} (${workflow.id})`);
     
     try {
-      const description = workflow.description || `Workflow ${workflow.name}`;
-      await this.memoryClient.add({
+      await this.db.insert(schema.workflows).values({
         id: workflow.id,
-        type: 'workflow',
-        content: description,
-        metadata: { workflow: workflow },
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+        tenantId: 'default', // ensure you pass the right tenant context
+        name: workflow.name,
+        description: workflow.description || '',
+        isActive: workflow.isActive,
+        trigger: workflow.trigger,
+        steps: workflow.steps,
+        uiData: workflow.uiData || null,
+      }).onConflictDoUpdate({
+        target: schema.workflows.id,
+        set: {
+          name: workflow.name,
+          description: workflow.description || '',
+          isActive: workflow.isActive,
+          trigger: workflow.trigger,
+          steps: workflow.steps,
+          uiData: workflow.uiData || null,
+          updatedAt: new Date(),
+        }
       });
-      this.logger.info(`Workflow ${workflow.name} saved to Qdrant Memory.`);
+      this.logger.info(`Workflow ${workflow.name} saved to Postgres.`);
     } catch (e: any) {
-      this.logger.error(`Failed to save workflow to memory: ${e.message}`);
+      this.logger.error(`Failed to save workflow to Postgres: ${e.message}`);
     }
 
     if (workflow.isActive) {
@@ -121,10 +128,10 @@ export class AutomationEngine extends EventEmitter {
     this.triggerManager.stopWorkflowTriggers(workflowId);
     this.workflows.delete(workflowId);
     try {
-      await this.memoryClient.delete(workflowId);
-      this.logger.info(`Deleted workflow ${workflowId} from memory.`);
+      await this.db.delete(schema.workflows).where(eq(schema.workflows.id, workflowId));
+      this.logger.info(`Deleted workflow ${workflowId} from Postgres.`);
     } catch (e: any) {
-      this.logger.error(`Failed to delete workflow from memory: ${e.message}`);
+      this.logger.error(`Failed to delete workflow from Postgres: ${e.message}`);
     }
   }
 
@@ -188,22 +195,22 @@ export class AutomationEngine extends EventEmitter {
   }
 
   private async saveCheckpoint(workflowId: string, executionId: string, currentStepId: string, status: WorkflowExecution['status'], context: WorkflowContext) {
-    const cp: WorkflowCheckpoint = {
-      executionId,
-      workflowId,
-      status,
-      currentStepId,
-      context,
-      updatedAt: Date.now()
-    };
     try {
-      await this.memoryClient.add({
-        id: `cp_${executionId}`,
-        type: 'checkpoint',
-        content: `Checkpoint for execution ${executionId}`,
-        metadata: { checkpoint: cp },
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+      await this.db.insert(schema.workflowCheckpoints).values({
+        executionId: executionId,
+        workflowId: workflowId,
+        status: status,
+        currentStepId: currentStepId,
+        context: context,
+        updatedAt: new Date(),
+      }).onConflictDoUpdate({
+        target: schema.workflowCheckpoints.executionId,
+        set: {
+          status: status,
+          currentStepId: currentStepId,
+          context: context,
+          updatedAt: new Date(),
+        }
       });
     } catch (e: any) {
       this.logger.warn(`Failed to save checkpoint for ${executionId}: ${e.message}`);
@@ -215,16 +222,30 @@ export class AutomationEngine extends EventEmitter {
     const maxRetries = step.retryPolicy?.maxRetries || 0;
     
     while (true) {
+      const abortController = new AbortController();
+      let timeoutId: NodeJS.Timeout | undefined;
+      
       try {
-        let actionPromise = this.actions.executeAction(step.action, context);
-        
         if (step.timeoutMs && step.timeoutMs > 0) {
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('STEP_TIMEOUT')), step.timeoutMs));
-          actionPromise = Promise.race([actionPromise, timeoutPromise]) as Promise<any>;
+          timeoutId = setTimeout(() => {
+            abortController.abort(new Error('STEP_TIMEOUT'));
+          }, step.timeoutMs);
         }
         
-        return await actionPromise;
+        const result = await this.actions.executeAction(step.action, context, abortController.signal);
+        
+        if (timeoutId) clearTimeout(timeoutId);
+        return result;
       } catch (error: any) {
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // If aborted with STEP_TIMEOUT, throw that instead of fetch's AbortError
+        if (abortController.signal.aborted && abortController.signal.reason?.message === 'STEP_TIMEOUT') {
+           error = new Error('STEP_TIMEOUT');
+        } else if (abortController.signal.aborted) {
+           error = abortController.signal.reason || new Error('STEP_TIMEOUT');
+        }
+
         if (retries >= maxRetries) {
           throw error;
         }

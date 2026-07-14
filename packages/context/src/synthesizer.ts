@@ -34,30 +34,13 @@ export class ContextSynthesizer {
   }
 
   formatForLLM(payload: ContextPayload): string {
-    return `
-<WORKSPACE>
-${payload.workspaceContext}
-</WORKSPACE>
-
-<KNOWLEDGE_GRAPH>
-${payload.graphContext}
-</KNOWLEDGE_GRAPH>
-
-<RECENT_CHATS>
-${payload.recentChats}
-</RECENT_CHATS>
-
-<OPEN_FILES>
-${payload.openFiles}
-</OPEN_FILES>
-
-<GOALS>
-${payload.goals}
-</GOALS>
-
-<TIMELINE>
-${payload.timeline}
-</TIMELINE>
-`;
+    const parts: string[] = [];
+    if (payload.workspaceContext) parts.push(`<WORKSPACE>\n${payload.workspaceContext}\n</WORKSPACE>`);
+    if (payload.graphContext) parts.push(`<KNOWLEDGE_GRAPH>\n${payload.graphContext}\n</KNOWLEDGE_GRAPH>`);
+    if (payload.recentChats) parts.push(`<RECENT_CHATS>\n${payload.recentChats}\n</RECENT_CHATS>`);
+    if (payload.openFiles) parts.push(`<OPEN_FILES>\n${payload.openFiles}\n</OPEN_FILES>`);
+    if (payload.goals) parts.push(`<GOALS>\n${payload.goals}\n</GOALS>`);
+    if (payload.timeline) parts.push(`<TIMELINE>\n${payload.timeline}\n</TIMELINE>`);
+    return parts.join('\n\n');
   }
 }

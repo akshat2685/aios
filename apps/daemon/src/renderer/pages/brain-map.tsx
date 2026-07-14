@@ -76,14 +76,14 @@ export default function BrainMapPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="glass-interactive p-2 rounded-lg">
+          <button aria-label="Zoom out" onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="glass-interactive p-2 rounded-lg">
             <ZoomOut size={16} />
           </button>
           <span className="text-xs text-muted-foreground font-mono w-12 text-center">{(zoom * 100).toFixed(0)}%</span>
-          <button onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="glass-interactive p-2 rounded-lg">
+          <button aria-label="Zoom in" onClick={() => setZoom(z => Math.min(3, z + 0.1))} className="glass-interactive p-2 rounded-lg">
             <ZoomIn size={16} />
           </button>
-          <button onClick={() => setZoom(1)} className="glass-interactive p-2 rounded-lg">
+          <button aria-label="Reset zoom" onClick={() => setZoom(1)} className="glass-interactive p-2 rounded-lg">
             <Maximize2 size={16} />
           </button>
         </div>
@@ -113,6 +113,7 @@ export default function BrainMapPage() {
           <Search size={14} className="text-muted-foreground" />
           <input
             type="text"
+            aria-label="Search nodes"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search nodes..."
@@ -167,6 +168,9 @@ export default function BrainMapPage() {
             <g
               key={node.id}
               onClick={() => setSelectedNode(node)}
+              onKeyDown={(e) => { if(e.key === 'Enter') setSelectedNode(node); }}
+              role="button"
+              tabIndex={0}
               className="cursor-pointer"
             >
               <circle
@@ -222,7 +226,7 @@ export default function BrainMapPage() {
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: NODE_COLORS[selectedNode.type] }} />
               {selectedNode.label}
             </h3>
-            <button onClick={() => setSelectedNode(null)} className="text-xs text-muted-foreground hover:text-foreground">
+            <button aria-label="Close details" onClick={() => setSelectedNode(null)} className="text-xs text-muted-foreground hover:text-foreground">
               ✕
             </button>
           </div>

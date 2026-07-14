@@ -627,6 +627,15 @@ export class LLMRouter {
       throw new Error(`LLM Provider ${providerId} is not registered`);
     }
 
+    const cached = this.cache.get(request);
+    if (cached) {
+      this.logger.info(`Cache hit for stream prompt: ${request.prompt.substring(0, 50)}...`);
+      this.telemetry.logCache(`Cache hit for stream ${providerId}:${request.model}`, true, { promptLength: request.prompt.length });
+      yield { chunk: cached.content, done: false };
+      yield { chunk: '', done: true, usage: cached.usage };
+      return;
+    }
+
     try {
       const requestManager = this.requestManagers.get(providerId);
       if (!requestManager) throw new Error(`RequestManager not found for ${providerId}`);
@@ -635,8 +644,12 @@ export class LLMRouter {
       const generator = await requestManager.enqueue(() => provider.stream(request), request.priority);
       let promptTokens = 0;
       let completionTokens = 0;
+      let fullContent = '';
 
       for await (const chunk of generator) {
+        if (chunk.chunk) {
+          fullContent += chunk.chunk;
+        }
         if (chunk.usage) {
           promptTokens = chunk.usage.promptTokens || promptTokens;
           completionTokens = chunk.usage.completionTokens || completionTokens;
@@ -652,8 +665,19 @@ export class LLMRouter {
       }
       this.recordRoutingDecision({ ...decision, selectedProvider: providerId, selectedModel: model });
       
+      const finalUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
       // Yield final decision info
-      yield { chunk: '', done: true, usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens } };
+      yield { chunk: '', done: true, usage: finalUsage };
+
+      if (fullContent) {
+        this.cache.set(request, {
+          content: fullContent,
+          usage: finalUsage,
+          provider: providerId as any,
+          model: request.model,
+          routingDecision: decision
+        });
+      }
     } catch (error: any) {
       if (error.name === 'AbortError' || error.message?.toLowerCase().includes('abort')) {
         this.logger.info(`Stream to ${providerId} was aborted by user.`);

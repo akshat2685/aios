@@ -18,6 +18,7 @@ export class CognitiveEngine {
     const prompt = `You are the AIOS Cognitive Engine. 
 Based on the qodex-ai/ai-agent-skills@multi-agent-orchestration and stablyai/orca@orchestration patterns, 
 parse the following goal into a structured Epic with multiple sub-tasks.
+Strictly adhere to the AIOS principles: Local-first execution, Enterprise Security, Zero Trust, Autonomous Software Engineering, high performance, low latency, and zero hallucinations.
 Goal: ${goal}
 
 Available Agents: ${availableAgents.join(', ')}

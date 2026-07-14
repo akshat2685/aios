@@ -5,8 +5,9 @@ global:
 scrape_configs:
   - job_name: 'spencer'
     static_configs:
-      - targets: ['localhost:3000']
+      - targets: ['spencer:3000']
 
   - job_name: 'qdrant'
     static_configs:
-      - targets: ['localhost:6333']
+      - targets: ['qdrant:6333']
+

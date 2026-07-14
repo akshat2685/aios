@@ -53,4 +53,24 @@ describe('MetricsCollector', () => {
     expect(output).toContain('test_hist_sum{path="/"} 750');
     expect(output).toContain('test_hist_count{path="/"} 2');
   });
+
+  it('should return safely when incrementing or setting a non-existent metric', () => {
+    const metrics = MetricsCollector.getInstance();
+    
+    expect(() => {
+      metrics.increment('non_existent', { label: 'val' }, 1);
+      metrics.set('non_existent', { label: 'val' }, 100);
+    }).not.toThrow();
+  });
+
+  it('should serialize labels correctly when empty labels are provided', () => {
+    const metrics = MetricsCollector.getInstance();
+    metrics.registerMetric('test_empty_labels', 'Test empty labels', 'counter');
+    
+    // Increment with empty labels
+    metrics.increment('test_empty_labels');
+    
+    const output = metrics.renderExposition();
+    expect(output).toContain('test_empty_labels 1'); // No brackets when labels are empty
+  });
 });

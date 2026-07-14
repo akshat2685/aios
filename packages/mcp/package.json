@@ -13,14 +13,15 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@aios/core": "*",
     "@aios/config": "*",
-    "@aios/types": "*"
+    "@aios/core": "*",
+    "@aios/types": "*",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "rimraf": "^5.0.0",
     "typescript": "^5.3.0",
-    "vitest": "^1.0.0",
-    "rimraf": "^5.0.0"
+    "vitest": "^1.0.0"
   }
 }

@@ -123,7 +123,7 @@ def _make_specialist_agent(name: str, model: str, instruction: str) -> Agent:
         model=model,
         name=f"{name}_agent",
         description=_runtime.registry.get_agent(name).description,
-        instruction=instruction + " You also have access to the run_agent_reach_command tool to fetch data from the internet using agent-reach.",
+        instruction=instruction + " You also have access to the run_agent_reach_command tool to fetch data from the internet using agent-reach. Strictly adhere to the AIOS principles: Local-first execution, Enterprise Security, Zero Trust, Autonomous Software Engineering, high performance, low latency, and zero hallucinations.",
         mode="task",
         tools=[run_agent_reach_command]
     )
@@ -146,7 +146,8 @@ def build_root_agent() -> Agent:
         description="Structured multi-agent hub for AIOS.",
         instruction=(
             "You operate the AIOS multi-agent hub. Use structured tasks, assign work to specialist agents, "
-            "and respond with concise, machine-readable outputs."
+            "and respond with concise, machine-readable outputs. "
+            "Strictly adhere to the AIOS principles: Local-first execution, Enterprise Security, Zero Trust, Autonomous Software Engineering, high performance, low latency, and zero hallucinations."
         ),
         tools=[list_registered_agents, create_structured_task, remember_fact],
         sub_agents=specialists,

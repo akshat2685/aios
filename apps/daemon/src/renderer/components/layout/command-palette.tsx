@@ -157,14 +157,14 @@ export function CommandPalette({ standalone = false }: CommandPaletteProps) {
   return (
     <AnimatePresence>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-[999] flex items-start justify-center pt-[15vh]" onClick={close}>
-        {!standalone && <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />}
+        className="fixed inset-0 z-[999] flex items-start justify-center pt-[15vh]" onClick={close} role="presentation">
+        {!standalone && <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden="true" />}
         <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }}
-          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] }} onClick={(e) => e.stopPropagation()}
+          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] }} onClick={(e) => e.stopPropagation()} role="presentation"
           className="relative w-full max-w-lg glass-strong shadow-2xl overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-glass-border">
             <Search size={16} className="text-muted-foreground" />
-            <input ref={inputRef} type="text" value={query} onChange={(e) => { setQuery(e.target.value); setSelectedIndex(0); }}
+            <input ref={inputRef} type="text" value={query} aria-label="Command search" onChange={(e) => { setQuery(e.target.value); setSelectedIndex(0); }}
               onKeyDown={handleKeyDown} placeholder="What do you want to do?" className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground" autoComplete="off" />
             <kbd className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-glass-strong border border-glass-border text-muted-foreground">ESC</kbd>
           </div>

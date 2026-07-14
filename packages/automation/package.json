@@ -16,7 +16,9 @@
     "@aios/memory": "*",
     "@aios/types": "*",
     "@aios/utils": "*",
+    "@aios/graph": "*",
     "chokidar": "^3.6.0",
+    "drizzle-orm": "^0.30.0",
     "jexl": "^2.3.0",
     "node-cron": "^3.0.3",
     "zod": "^3.22.4"

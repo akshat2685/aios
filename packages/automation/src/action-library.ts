@@ -59,18 +59,18 @@ export class ActionLibrary {
     return traverse(params);
   }
 
-  async executeAction(action: AutomationAction, context: WorkflowContext): Promise<any> {
+  async executeAction(action: AutomationAction, context: WorkflowContext, signal?: AbortSignal): Promise<any> {
     this.logger.info(`Executing action ${action.name} (${action.type})`);
     
     const params = await this.interpolateParams(action.params, context);
 
     switch (action.type) {
       case 'shell':
-        return await this.runShell(params.command);
+        return await this.runShell(params.command, signal);
       case 'file':
         return await this.runFileOp(params);
       case 'api':
-        return await this.runApiCall(params);
+        return await this.runApiCall(params, signal);
       case 'agent':
         return { status: 'delegated', message: 'Action routed to agent', targetAgent: params.agentId, task: params.task };
       case 'variable':
@@ -83,9 +83,9 @@ export class ActionLibrary {
     }
   }
 
-  private async runShell(command: string): Promise<any> {
+  private async runShell(command: string, signal?: AbortSignal): Promise<any> {
     try {
-      const { stdout, stderr } = await execPromise(command);
+      const { stdout, stderr } = await execPromise(command, { signal });
       return { stdout, stderr };
     } catch (error: any) {
       this.logger.error(`Shell action failed: ${error.message}`);
@@ -107,11 +107,12 @@ export class ActionLibrary {
     }
   }
 
-  private async runApiCall(params: { url: string, method: string, body?: any, headers?: any }): Promise<any> {
+  private async runApiCall(params: { url: string, method: string, body?: any, headers?: any }, signal?: AbortSignal): Promise<any> {
     const response = await fetch(params.url, {
       method: params.method,
       body: params.body ? (typeof params.body === 'string' ? params.body : JSON.stringify(params.body)) : undefined,
       headers: { 'Content-Type': 'application/json', ...params.headers },
+      signal,
     });
     let data;
     try {

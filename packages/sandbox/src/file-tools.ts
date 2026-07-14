@@ -5,6 +5,16 @@ import * as path from 'path';
 /**
  * Built-in production-grade file tools with absolute workspace path safety guards.
  */
+
+function getSafePath(inputPath: string): string {
+  const cwd = process.cwd();
+  const resolvedPath = path.resolve(cwd, inputPath);
+  const relative = path.relative(cwd, resolvedPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Access denied: Path is outside the workspace');
+  }
+  return resolvedPath;
+}
 export const fileTools: Record<string, ToolDefinition> = {
   'file:read': {
     id: 'file:read',
@@ -30,7 +40,7 @@ export const fileTools: Record<string, ToolDefinition> = {
     requires_approval: false,
     parallel_safe: true,
     executor: async (input: { path: string; encoding?: string }) => {
-      const resolvedPath = path.resolve(input.path);
+      const resolvedPath = getSafePath(input.path);
       const content = await fs.readFile(resolvedPath, (input.encoding || 'utf-8') as BufferEncoding);
       return { content, size: content.length };
     }
@@ -60,7 +70,7 @@ export const fileTools: Record<string, ToolDefinition> = {
     requires_approval: true, // Destructive write operation
     parallel_safe: false,
     executor: async (input: { path: string; content: string }) => {
-      const resolvedPath = path.resolve(input.path);
+      const resolvedPath = getSafePath(input.path);
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
       await fs.writeFile(resolvedPath, input.content, 'utf-8');
       return { written: input.content.length, path: resolvedPath };
@@ -89,7 +99,7 @@ export const fileTools: Record<string, ToolDefinition> = {
     requires_approval: false,
     parallel_safe: true,
     executor: async (input: { path: string }) => {
-      const resolvedPath = path.resolve(input.path);
+      const resolvedPath = getSafePath(input.path);
       const files = await fs.readdir(resolvedPath);
       return { files };
     }

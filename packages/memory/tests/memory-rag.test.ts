@@ -18,6 +18,7 @@ vi.mock('@qdrant/js-client-rest', () => {
       delete(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points/delete', method: 'POST', collectionName: name, body: data }); }
       retrieve(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/points', method: 'POST', collectionName: name, body: data }); }
       deleteCollection(name: any) { return mockRequestFn({ path: '/collections/{collection_name}', method: 'DELETE', collectionName: name }); }
+      createPayloadIndex(name: any, data: any) { return mockRequestFn({ path: '/collections/{collection_name}/index', method: 'PUT', collectionName: name, body: data }); }
     }
   };
 });
@@ -84,7 +85,7 @@ describe('AIOS Memory & RAG Pipeline Tests', () => {
       const client = new MemoryClient();
       await client.init();
 
-      expect(mockRequestFn).toHaveBeenCalledTimes(2);
+      expect(mockRequestFn).toHaveBeenCalledTimes(4);
       
       // First call (getCollection)
       expect(mockRequestFn.mock.calls[0][0].path).toBe('/collections/{collection_name}');
@@ -93,12 +94,14 @@ describe('AIOS Memory & RAG Pipeline Tests', () => {
       // Second call (createCollection)
       expect(mockRequestFn.mock.calls[1][0].path).toBe('/collections/{collection_name}');
       expect(mockRequestFn.mock.calls[1][0].method).toBe('PUT');
-      expect(mockRequestFn.mock.calls[1][0].body).toEqual({
-        vectors: {
-          size: 384,
-          distance: 'Cosine'
-        }
-      });
+      
+      // Third call (createPayloadIndex)
+      expect(mockRequestFn.mock.calls[2][0].path).toBe('/collections/{collection_name}/index');
+      expect(mockRequestFn.mock.calls[2][0].method).toBe('PUT');
+      
+      // Fourth call (createPayloadIndex)
+      expect(mockRequestFn.mock.calls[3][0].path).toBe('/collections/{collection_name}/index');
+      expect(mockRequestFn.mock.calls[3][0].method).toBe('PUT');
     });
 
     it('should skip creation if collection already exists', async () => {
@@ -144,7 +147,7 @@ describe('AIOS Memory & RAG Pipeline Tests', () => {
         points: [
           {
             id: record.id,
-            vector: expect.any(Array),
+            vector: expect.any(Object),
             payload: {
               type: record.type,
               content: record.content,

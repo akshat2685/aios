@@ -1,0 +1,54 @@
+﻿global:
+  namespace: aios-system
+  imagePullPolicy: IfNotPresent
+  storageClass: "standard"
+
+modelGateway:
+  replicaCount: 3
+  image: aios/model-gateway:v1.0.0
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+vectorDb:
+  replicaCount: 3
+  image: aios/vector-db:v1.0.0
+  persistence:
+    enabled: true
+    size: 50Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+
+eventBus:
+  replicaCount: 3
+  image: aios/event-bus:v1.0.0
+  persistence:
+    enabled: true
+    size: 20Gi
+
+memoryService:
+  replicaCount: 2
+  image: aios/memory-service:v1.0.0
+
+agentPods:
+  replicaCount: 5
+  image: aios/agent-pods:v1.0.0
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "api.aios.enterprise.local"

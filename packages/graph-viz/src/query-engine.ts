@@ -53,25 +53,111 @@ export class GraphQueryEngine {
   ): Promise<{ nodes: GraphVizNode[]; edges: GraphVizEdge[] }> {
     this.logger.debug(`Fetching neighborhood of node ${nodeId} (depth=${depth})`);
 
-    // Stub: BFS traversal from nodeId up to `depth` hops
-    // 1. Start from nodeId
-    // 2. For each level, find all connected edges and their target nodes
-    // 3. Collect unique nodes and edges up to depth
-    return { nodes: [], edges: [] };
+    const { nodes: allNodes, edges: allEdges } = await this.queryGraph();
+    
+    const nodesMap = new Map<string, GraphVizNode>(allNodes.map(n => [n.id, n]));
+    const adjList = new Map<string, GraphVizEdge[]>();
+    
+    for (const edge of allEdges) {
+      if (!adjList.has(edge.sourceId)) adjList.set(edge.sourceId, []);
+      if (!adjList.has(edge.targetId)) adjList.set(edge.targetId, []);
+      adjList.get(edge.sourceId)!.push(edge);
+      adjList.get(edge.targetId)!.push(edge);
+    }
+    
+    const visitedNodes = new Set<string>();
+    const collectedEdges = new Set<GraphVizEdge>();
+    const queue: { id: string; d: number }[] = [];
+    
+    if (nodesMap.has(nodeId)) {
+      queue.push({ id: nodeId, d: 0 });
+      visitedNodes.add(nodeId);
+    }
+    
+    while (queue.length > 0) {
+      const { id, d } = queue.shift()!;
+      if (d >= depth) continue;
+      
+      const neighbors = adjList.get(id) || [];
+      for (const edge of neighbors) {
+        collectedEdges.add(edge);
+        const nextId = edge.sourceId === id ? edge.targetId : edge.sourceId;
+        if (!visitedNodes.has(nextId)) {
+          visitedNodes.add(nextId);
+          queue.push({ id: nextId, d: d + 1 });
+        }
+      }
+    }
+    
+    const resultNodes = Array.from(visitedNodes).map(id => nodesMap.get(id)!).filter(Boolean);
+    const resultEdges = Array.from(collectedEdges);
+    
+    return { nodes: resultNodes, edges: resultEdges };
   }
 
-  /**
-   * Find the shortest path between two nodes in the graph.
-   */
   public async findShortestPath(
     sourceId: string,
     targetId: string
   ): Promise<{ path: string[]; edges: GraphVizEdge[] } | null> {
     this.logger.debug(`Finding shortest path: ${sourceId} → ${targetId}`);
 
-    // Stub: Dijkstra or BFS shortest path between source and target
-    // Returns ordered list of node IDs and the edges connecting them
-    return null;
+    const { nodes: allNodes, edges: allEdges } = await this.queryGraph();
+    
+    const adjList = new Map<string, { to: string; edge: GraphVizEdge }[]>();
+    for (const edge of allEdges) {
+      if (!adjList.has(edge.sourceId)) adjList.set(edge.sourceId, []);
+      if (!adjList.has(edge.targetId)) adjList.set(edge.targetId, []);
+      adjList.get(edge.sourceId)!.push({ to: edge.targetId, edge });
+      adjList.get(edge.targetId)!.push({ to: edge.sourceId, edge });
+    }
+
+    if (!adjList.has(sourceId) || !adjList.has(targetId)) return null;
+
+    const dist = new Map<string, number>();
+    const prev = new Map<string, { node: string; edge: GraphVizEdge }>();
+    const pq: { id: string; d: number }[] = [];
+
+    for (const n of allNodes) dist.set(n.id, Infinity);
+    dist.set(sourceId, 0);
+    pq.push({ id: sourceId, d: 0 });
+
+    while (pq.length > 0) {
+      pq.sort((a, b) => a.d - b.d);
+      const { id: u, d: distU } = pq.shift()!;
+
+      if (distU > (dist.get(u) ?? Infinity)) continue;
+      if (u === targetId) break;
+
+      const neighbors = adjList.get(u) || [];
+      for (const { to: v, edge } of neighbors) {
+        const weight = edge.weight ?? 1;
+        const alt = (dist.get(u) ?? Infinity) + weight;
+        if (alt < (dist.get(v) ?? Infinity)) {
+          dist.set(v, alt);
+          prev.set(v, { node: u, edge });
+          pq.push({ id: v, d: alt });
+        }
+      }
+    }
+
+    if ((dist.get(targetId) ?? Infinity) === Infinity) return null;
+
+    const path: string[] = [];
+    const edges: GraphVizEdge[] = [];
+    let curr = targetId;
+    
+    while (curr !== sourceId) {
+      path.push(curr);
+      const p = prev.get(curr)!;
+      edges.push(p.edge);
+      curr = p.node;
+    }
+    
+    path.push(sourceId);
+    path.reverse();
+    edges.reverse();
+
+    return { path, edges };
   }
 
   /**

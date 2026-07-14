@@ -4,6 +4,7 @@ import { CoreLogger } from '@aios/core';
 import { AssistantAgent, CoderAgent, ResearchAgent, PlannerAgent, ReviewerAgent, TesterAgent, ArchitectAgent, SecurityAgent, PerformanceAgent } from './core-agents';
 import { SpencerAgent } from './spencer-agent';
 import { AgentMessage, AgentResponse } from '@aios/types';
+import { LangGraphWorkflows } from './langgraph-workflows';
 
 import { getDelegationTool } from './tools/delegation-tool';
 import { SkillRegistry } from './skill-registry';
@@ -294,10 +295,6 @@ export class AgentOrchestrator {
 
   async verifyAndCorrect(task: string, maxIterations = 3): Promise<AgentResponse> {
     const taskId = `task_${Date.now()}`;
-    let iteration = 0;
-    let currentTask = task;
-    let lastResponse: AgentResponse | null = null;
-    let history: AgentMessage[] = [];
     
     // Human Approval Gate Check
     if (this.autonomyLevel === AutonomyLevel.Assistant) {
@@ -311,97 +308,73 @@ export class AgentOrchestrator {
       }
     }
 
-    while (iteration < maxIterations) {
-      this.logger.info(`verifyAndCorrect: Iteration ${iteration + 1} for task`);
-      // 1. Coder executes the task
-      lastResponse = await this.routeRequest('coder', { role: 'user', content: currentTask, timestamp: Date.now() }, history);
+    const workflows = new LangGraphWorkflows(this);
+    const graph = workflows.getVerifyAndCorrectGraph();
+    const config = { configurable: { thread_id: taskId } };
+    
+    const initialState = {
+      task: task,
+      code_changes: "",
+      reviewer_feedback: "",
+      tester_feedback: "",
+      status: "pending",
+      iteration_count: 0,
+      final_response: null
+    };
+
+    const result = (await graph.invoke(initialState, config)) as unknown as import('./langgraph-workflows').WorkflowState;
+    
+    if (result.status === "done") {
+      this.reputationTracker.recordTaskCompletion('coder', true, result.iteration_count);
+      this.reputationTracker.recordTaskCompletion('reviewer', true, 1);
+      this.reputationTracker.recordTaskCompletion('tester', true, 1);
       
-      // Update history for coder
-      history.push({ role: 'user', content: currentTask, timestamp: Date.now() });
-      history.push({ role: 'assistant', content: lastResponse.message, timestamp: Date.now() });
-
-      // 2. Reviewer checks the result
-      const reviewPrompt = `Please review the following code changes and output for the task: "${task}".\n\nCoder Output:\n${lastResponse.message}\n\nIf it meets all requirements and quality standards, reply with exactly "APPROVED". Otherwise, provide actionable feedback for the coder to fix.`;
-      const reviewResponse = await this.routeRequest('reviewer', { role: 'user', content: reviewPrompt, timestamp: Date.now() });
+      await this.logDecision({
+        taskId,
+        planner: 'orchestrator',
+        executor: 'coder',
+        model: 'default',
+        reason: `Iterative refinement passed after ${result.iteration_count} attempts`,
+        filesChanged: [], 
+        testStatus: 'PASS',
+        securityStatus: 'PASS',
+        timestamp: Date.now()
+      });
       
-      if (reviewResponse.message.trim().toUpperCase().includes('APPROVED')) {
-        this.logger.info(`verifyAndCorrect: Reviewer approved on iteration ${iteration + 1}, routing to Tester`);
-
-        // 3. Tester validates the result
-        const testPrompt = `Please test the following code changes and output for the task: "${task}".\n\nCoder Output:\n${lastResponse.message}\n\nIf all tests pass and the code functions correctly, reply with exactly "PASS". Otherwise, provide actionable feedback for the coder to fix.`;
-        const testResponse = await this.routeRequest('tester', { role: 'user', content: testPrompt, timestamp: Date.now() });
-
-        if (testResponse.message.trim().toUpperCase().includes('PASS')) {
-          this.logger.info(`verifyAndCorrect: Tester passed on iteration ${iteration + 1}`);
-          this.reputationTracker.recordTaskCompletion('coder', true, iteration + 1);
-          this.reputationTracker.recordTaskCompletion('reviewer', true, 1);
-          this.reputationTracker.recordTaskCompletion('tester', true, 1);
-          
-          await this.logDecision({
-            taskId,
-            planner: 'orchestrator',
-            executor: 'coder',
-            model: 'default',
-            reason: `Iterative refinement passed after ${iteration + 1} attempts`,
-            filesChanged: [], // Normally parsed from lastResponse
-            testStatus: 'PASS',
-            securityStatus: 'PASS',
-            timestamp: Date.now()
-          });
-          
-          return lastResponse;
-        }
-
-        // Setup for next iteration (Tester failed)
-        this.logger.warn(`verifyAndCorrect: Tester reported failures: ${testResponse.message.substring(0, 100)}...`);
-        this.reputationTracker.recordTaskCompletion('tester', false, 1);
-        currentTask = `The tester provided the following feedback on your previous output. Please fix the issues:\n\nTester Feedback:\n${testResponse.message}`;
-      } else {
-        // Setup for next iteration (Reviewer failed)
-        this.logger.warn(`verifyAndCorrect: Reviewer requested changes: ${reviewResponse.message.substring(0, 100)}...`);
-        this.reputationTracker.recordTaskCompletion('reviewer', false, 1);
-        currentTask = `The reviewer provided the following feedback on your previous output. Please fix the issues:\n\nReviewer Feedback:\n${reviewResponse.message}`;
-      }
+      return result.final_response || { message: 'Task passed but no final response found', done: true };
+    } else {
+      this.reputationTracker.recordTaskCompletion('coder', false, result.iteration_count);
       
-      iteration++;
+      await this.logDecision({
+        taskId,
+        planner: 'orchestrator',
+        executor: 'coder',
+        model: 'default',
+        reason: `Max iterations reached without approval.`,
+        filesChanged: [],
+        testStatus: 'FAIL',
+        securityStatus: 'PASS',
+        timestamp: Date.now()
+      });
+      
+      this.logger.error(`verifyAndCorrect: Max iterations reached without approval.`);
+      return result.final_response || { message: 'Failed to complete task', done: true };
     }
-    
-    this.reputationTracker.recordTaskCompletion('coder', false, iteration);
-    
-    await this.logDecision({
-      taskId,
-      planner: 'orchestrator',
-      executor: 'coder',
-      model: 'default',
-      reason: `Max iterations reached without approval.`,
-      filesChanged: [],
-      testStatus: 'FAIL',
-      securityStatus: 'PASS',
-      timestamp: Date.now()
-    });
-    
-    this.logger.error(`verifyAndCorrect: Max iterations reached without approval.`);
-    return lastResponse || { message: 'Failed to complete task', done: true };
   }
 
   async resolveDebate(task: string, proposedPlan: string): Promise<AgentResponse> {
     this.logger.info(`Starting debate for critical task: ${task}`);
     
-    const debatePrompt = `Please evaluate the following proposed plan for the task: "${task}".\n\nProposed Plan:\n${proposedPlan}\n\nProvide your analysis, critique, and actionable improvements based on your specialized perspective.`;
-
-    const [architectRes, securityRes, performanceRes] = await Promise.all([
-      this.routeRequest('architect', { role: 'user', content: debatePrompt, timestamp: Date.now() }),
-      this.routeRequest('security', { role: 'user', content: debatePrompt, timestamp: Date.now() }),
-      this.routeRequest('performance', { role: 'user', content: debatePrompt, timestamp: Date.now() })
-    ]);
-
-    this.logger.info(`Received debate feedback from Architect, Security, and Performance agents.`);
-
-    const synthesisPrompt = `You are a neutral orchestrator. A critical task was proposed:\n"${task}"\n\nProposed Plan:\n${proposedPlan}\n\nThe following expert analyses were provided:\n\nArchitect Feedback:\n${architectRes.message}\n\nSecurity Feedback:\n${securityRes.message}\n\nPerformance Feedback:\n${performanceRes.message}\n\nPlease synthesize these critiques and produce a 'Final Decision' summary that merges the best parts, resolves conflicts, and provides a final approved plan for execution. Start your output with "Final Decision:".`;
-
-    const finalDecisionRes = await this.routeRequest('planner', { role: 'user', content: synthesisPrompt, timestamp: Date.now() });
+    const workflows = new LangGraphWorkflows(this);
+    const graph = workflows.getResolveDebateGraph();
+    const config = { configurable: { thread_id: `debate_${Date.now()}` } };
+    
+    const result = (await graph.invoke({
+      task,
+      proposed_plan: proposedPlan
+    }, config)) as any;
 
     this.logger.info(`Debate resolved with Final Decision.`);
-    return finalDecisionRes;
+    return result.final_response || { message: 'Debate failed', done: true };
   }
 }

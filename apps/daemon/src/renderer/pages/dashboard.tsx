@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAppStore, type AgentStatus } from '@/stores/app-store';
 import { getElectronAPI } from '@/lib/electron-api';
-import { GlassPanel, GlassContainer, GlassButton } from '../components/ui/glass';
+import { GlassPanel, GlassContainer, GlassButton } from '@aios/ui';
 
 const containerVariants: any = {
   hidden: { opacity: 0 },
@@ -188,7 +188,7 @@ function MemoryStatsCard() {
               transition={{ delay: 0.5, type: 'spring', stiffness: 200 }}
               className="text-4xl font-bold text-gradient-accent mb-1 relative z-10"
             >
-              {stats.points.toLocaleString()}
+              {(stats?.points || 0).toLocaleString()}
             </motion.div>
             <span className="text-xs tracking-widest uppercase text-muted-foreground relative z-10">Data Points</span>
           </div>
@@ -200,7 +200,7 @@ function MemoryStatsCard() {
               transition={{ delay: 0.6, type: 'spring', stiffness: 200 }}
               className="text-4xl font-bold text-secondary mb-1 relative z-10"
             >
-              {stats.vectors.toLocaleString()}
+              {(stats?.vectors || 0).toLocaleString()}
             </motion.div>
             <span className="text-xs tracking-widest uppercase text-muted-foreground relative z-10">Vectors</span>
           </div>

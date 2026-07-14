@@ -1,0 +1,39 @@
+﻿apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-vector-db
+  labels:
+    app: vector-db
+spec:
+  serviceName: "{{ .Release.Name }}-vector-db-hl"
+  replicas: {{ .Values.vectorDb.replicaCount }}
+  selector:
+    matchLabels:
+      app: vector-db
+  template:
+    metadata:
+      labels:
+        app: vector-db
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: vector-db
+          image: "{{ .Values.vectorDb.image }}"
+          ports:
+            - containerPort: 6333
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/vector-db
+          resources:
+            {{- toYaml .Values.vectorDb.resources | nindent 12 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.global.storageClass }}
+      resources:
+        requests:
+          storage: {{ .Values.vectorDb.persistence.size }}

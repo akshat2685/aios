@@ -1,0 +1,39 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-model-gateway
+  labels:
+    app: model-gateway
+spec:
+  replicas: {{ .Values.modelGateway.replicaCount }}
+  selector:
+    matchLabels:
+      app: model-gateway
+  template:
+    metadata:
+      labels:
+        app: model-gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: model-gateway
+          image: "{{ .Values.modelGateway.image }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.modelGateway.resources | nindent 12 }}

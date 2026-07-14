@@ -4,6 +4,7 @@ interface HeuristicRule {
   keywords: string[];
   weight: number;
   taskType: TaskType;
+  regexes?: RegExp[];
 }
 
 const HEURISTIC_RULES: HeuristicRule[] = [
@@ -116,10 +117,14 @@ export class TaskClassifier {
 
     // Apply heuristic rules
     for (const rule of HEURISTIC_RULES) {
+      if (!rule.regexes) {
+        rule.regexes = rule.keywords.map(keyword => 
+          new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+        );
+      }
+      
       let matches = 0;
-      for (const keyword of rule.keywords) {
-        // Check for word boundaries
-        const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      for (const regex of rule.regexes) {
         if (regex.test(lower)) {
           matches++;
         }
@@ -239,7 +244,7 @@ Task Type:`;
 
       const response = await localLLM.generate({
         prompt: classificationPrompt,
-        systemPrompt: 'You are a task classifier. Output only the task type.',
+        systemPrompt: 'You are a task classifier. Output only the task type. Strictly adhere to the AIOS principles: Local-first execution, Enterprise Security, Zero Trust, Autonomous Software Engineering, high performance, low latency, and zero hallucinations.',
         model: 'llama3.2:latest',
         temperature: 0.1,
         maxTokens: 20

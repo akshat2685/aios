@@ -4,3 +4,4 @@ export { MemorySearchOptions } from './qdrant-client';
 export { chunkText, ChunkingOptions } from './chunker';
 export { ExperienceReplay, Experience } from './experience-replay';
 export { AgentMemoryEvolution, EvolutionRecord } from './agent-memory-evolution';
+export { DocumentRetrieval, DocumentMetadata, DocumentChunk } from './document-retrieval';

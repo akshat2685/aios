@@ -12,8 +12,9 @@
   "dependencies": {
     "@aios/config": "0.1.0",
     "@aios/core": "0.1.0",
-    "@libsql/client": "^0.6.0",
+    "postgres": "^3.4.4",
     "drizzle-orm": "^0.30.10",
+    "neo4j-driver": "^6.2.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

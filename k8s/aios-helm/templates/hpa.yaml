@@ -1,0 +1,18 @@
+﻿apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-model-gateway-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-model-gateway
+  minReplicas: {{ .Values.modelGateway.hpa.minReplicas }}
+  maxReplicas: {{ .Values.modelGateway.hpa.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.modelGateway.hpa.targetCPUUtilizationPercentage }}

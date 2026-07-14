@@ -10,6 +10,7 @@ services:
       - LOG_LEVEL=info
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql://aios:aios@postgres:5432/aios_db
     volumes:
       - ./data:/app/data
       - ~/.cache/spencer:/root/.cache/spencer
@@ -17,6 +18,20 @@ services:
       - spencer-network
     depends_on:
       - qdrant
+      - postgres
+
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=aios
+      - POSTGRES_PASSWORD=aios
+      - POSTGRES_DB=aios_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - spencer-network
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -47,6 +62,7 @@ services:
 
 volumes:
   qdrant-storage:
+  postgres-data:
 
 networks:
   spencer-network:

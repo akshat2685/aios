@@ -1,5 +1,6 @@
 import { ConfigManager } from '@aios/config';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import { initWasm, getSparseEmbeddingWasm } from './wasm-loader.js';
 
 export interface MemoryRecord {
   id: string;
@@ -47,6 +48,12 @@ export class MemoryClient implements IMemoryClient {
         apiKey: this.config.qdrantApiKey
       });
 
+      try {
+        await initWasm();
+      } catch (e) {
+        this.warn('Failed to initialize Wasm module for sparse embedding', e);
+      }
+
       if (!(await this.healthCheck())) {
         this.warn('Qdrant memory database is unreachable. Will operate in degraded mode until it comes back.');
         return; // Don't crash, just operate in degraded mode
@@ -68,18 +75,36 @@ export class MemoryClient implements IMemoryClient {
           vectors: {
             size: dim,
             distance: 'Cosine',
+            on_disk: true, // Optimized for larger datasets
+          },
+          sparse_vectors: {
+            'sparse-text': {}
+          },
+          hnsw_config: {
+            m: 16,
+            ef_construct: 100,
+            full_scan_threshold: 10000,
+          },
+          optimizers_config: {
+            default_segment_number: 2,
+            memmap_threshold: 20000,
           },
         });
         
         try {
-          // Skeleton for Hybrid Search:
-          // In a real implementation we would create a text payload index:
-          // await this.client.api('collections').createPayloadIndex(this.collectionName, {
-          //   field_name: 'content',
-          //   field_schema: 'text',
-          // });
+          // Create a text payload index for fast hybrid search filtering
+          await this.client.createPayloadIndex(this.collectionName, {
+            field_name: 'content',
+            field_schema: 'text',
+            wait: false,
+          });
+          await this.client.createPayloadIndex(this.collectionName, {
+            field_name: 'type',
+            field_schema: 'keyword',
+            wait: false,
+          });
         } catch (e: any) {
-          this.warn('Failed to create text payload index for hybrid search', e);
+          this.warn('Failed to create payload indexes for optimization', e);
         }
 
         this.info(`Created collection ${this.collectionName} with dimension ${dim}`);
@@ -94,11 +119,15 @@ export class MemoryClient implements IMemoryClient {
   async add(record: MemoryRecord): Promise<void> {
     try {
       const vector = await this.getEmbedding(record.content);
+      const sparseVector = this.getSparseEmbedding(record.content);
       await this.client.upsert(this.collectionName, {
         points: [
           {
             id: record.id,
-            vector: vector,
+            vector: {
+              '': vector,
+              'sparse-text': sparseVector
+            },
             payload: {
               type: record.type,
               content: record.content,
@@ -118,26 +147,40 @@ export class MemoryClient implements IMemoryClient {
 
   async addMany(records: MemoryRecord[]): Promise<void> {
     try {
-      const points = [];
-      for (const record of records) {
-        const vector = await this.getEmbedding(record.content);
-        points.push({
-          id: record.id,
-          vector: vector,
-          payload: {
-            type: record.type,
-            content: record.content,
-            metadata: record.metadata,
-            createdAt: record.createdAt,
-            updatedAt: record.updatedAt,
-          },
-        });
-      }
+      const BATCH_SIZE = 50;
 
-      if (points.length > 0) {
-        await this.client.upsert(this.collectionName, {
-          points,
-        });
+      for (let i = 0; i < records.length; i += BATCH_SIZE) {
+        const batch = records.slice(i, i + BATCH_SIZE);
+        
+        // Concurrently fetch embeddings for the batch
+        const points = await Promise.all(
+          batch.map(async (record) => {
+            const vector = await this.getEmbedding(record.content);
+            const sparseVector = this.getSparseEmbedding(record.content);
+            return {
+              id: record.id,
+              vector: {
+                '': vector,
+                'sparse-text': sparseVector
+              },
+              payload: {
+                type: record.type,
+                content: record.content,
+                metadata: record.metadata,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt,
+              },
+            };
+          })
+        );
+
+        if (points.length > 0) {
+          // Use wait: false to speed up large data ingestion
+          await this.client.upsert(this.collectionName, {
+            wait: false,
+            points,
+          });
+        }
       }
       this.info(`Successfully added ${records.length} memory records`);
     } catch (error: any) {
@@ -152,31 +195,36 @@ export class MemoryClient implements IMemoryClient {
       
       let filter = options.filter as any;
       
-      if (options.hybrid) {
-        // Skeleton for hybrid search: Combine dense vector search with a sparse text match
-        // In a fully optimized production setup, we would use Qdrant's `prefetch` 
-        // with sparse vectors and Reciprocal Rank Fusion (RRF).
-        const textMatchFilter = {
-          key: 'content',
-          match: { text: options.query }
-        };
-        
-        if (filter && filter.must) {
-          filter.must.push(textMatchFilter);
-        } else if (filter) {
-          filter = { must: [textMatchFilter, ...(Array.isArray(filter) ? filter : [filter])] };
-        } else {
-          filter = { must: [textMatchFilter] };
-        }
-      }
-
-      const points = await this.client.search(this.collectionName, {
-        vector: vector,
+      let searchParams: any = {
         filter: filter,
         limit: options.limit || 10,
         offset: options.offset || 0,
         with_payload: true,
-      });
+      };
+
+      if (options.hybrid) {
+        const sparseVector = this.getSparseEmbedding(options.query);
+        
+        searchParams.prefetch = [
+          {
+            query: vector,
+            filter: filter,
+            limit: (options.limit || 10) * 2,
+          },
+          {
+            query: sparseVector,
+            using: 'sparse-text',
+            filter: filter,
+            limit: (options.limit || 10) * 2,
+          }
+        ];
+        
+        searchParams.query = { fusion: 'rrf' };
+      } else {
+        searchParams.vector = vector;
+      }
+
+      const points = await this.client.search(this.collectionName, searchParams);
 
       return points.map((point: any) => ({
         id: point.id,
@@ -343,6 +391,37 @@ export class MemoryClient implements IMemoryClient {
       vector[j] = (hash / 0x7fffffff) * 2 - 1;
     }
     return vector;
+  }
+
+  private getSparseEmbedding(text: string): { indices: number[], values: number[] } {
+    try {
+      const wasmResult = getSparseEmbeddingWasm(text);
+      const indices: number[] = [];
+      const values: number[] = [];
+      for (let i = 0; i < wasmResult.length; i += 2) {
+        indices.push(wasmResult[i]);
+        values.push(wasmResult[i + 1]);
+      }
+      return { indices, values };
+    } catch (e) {
+      // JS Fallback
+      const tokens = text.toLowerCase().match(/\w+/g) || [];
+      const counts = new Map<number, number>();
+      for (const token of tokens) {
+        if (token.length < 2) continue;
+        let hash = 5381;
+        for (let i = 0; i < token.length; i++) {
+          hash = ((hash << 5) + hash) + token.charCodeAt(i);
+        }
+        const idx = Math.abs(hash) % 10000;
+        counts.set(idx, (counts.get(idx) || 0) + 1);
+      }
+      
+      return {
+        indices: Array.from(counts.keys()),
+        values: Array.from(counts.values()).map(v => Math.log10(v + 1)), // TF-like normalization
+      };
+    }
   }
 
   private info(message: string, meta?: any): void {

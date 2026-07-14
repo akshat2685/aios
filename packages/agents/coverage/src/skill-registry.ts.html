@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/83</span>
+                <span class='fraction'>0/88</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/83</span>
+                <span class='fraction'>0/88</span>
             </div>
         
             
@@ -146,7 +146,17 @@
 <a name='L81'></a><a href='#L81'>81</a>
 <a name='L82'></a><a href='#L82'>82</a>
 <a name='L83'></a><a href='#L83'>83</a>
-<a name='L84'></a><a href='#L84'>84</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -253,28 +263,33 @@
 <span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >  /**</span>
-<span class="cstat-no" title="statement not covered" >   * Scans the workspace for installed skills (under .agents/skills)</span>
+<span class="cstat-no" title="statement not covered" >   * Scans the workspace for installed skills (under .agents/skills and packages/skills)</span>
 <span class="cstat-no" title="statement not covered" >   */</span>
 <span class="cstat-no" title="statement not covered" >  async discoverSkills(): Promise&lt;void&gt; {</span>
-<span class="cstat-no" title="statement not covered" >    const skillsDir = path.join(this.workspacePath, '.agents', 'skills');</span>
-<span class="cstat-no" title="statement not covered" >    </span>
-<span class="cstat-no" title="statement not covered" >    try {</span>
-<span class="cstat-no" title="statement not covered" >      const exists = await fs.access(skillsDir).then(() =&gt; true).catch(() =&gt; false);</span>
-<span class="cstat-no" title="statement not covered" >      if (!exists) {</span>
-<span class="cstat-no" title="statement not covered" >        this.logger.info(`Skills directory not found at ${skillsDir}, skipping skill discovery.`);</span>
-<span class="cstat-no" title="statement not covered" >        return;</span>
-<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    const locations = [</span>
+<span class="cstat-no" title="statement not covered" >      path.join(this.workspacePath, '.agents', 'skills'),</span>
+<span class="cstat-no" title="statement not covered" >      path.join(this.workspacePath, 'packages', 'skills')</span>
+<span class="cstat-no" title="statement not covered" >    ];</span>
 <span class="cstat-no" title="statement not covered" ></span>
-<span class="cstat-no" title="statement not covered" >      const entries = await fs.readdir(skillsDir, { withFileTypes: true });</span>
-<span class="cstat-no" title="statement not covered" >      for (const entry of entries) {</span>
-<span class="cstat-no" title="statement not covered" >        if (entry.isDirectory()) {</span>
-<span class="cstat-no" title="statement not covered" >          await this.loadSkill(path.join(skillsDir, entry.name), entry.name);</span>
+<span class="cstat-no" title="statement not covered" >    for (const skillsDir of locations) {</span>
+<span class="cstat-no" title="statement not covered" >      try {</span>
+<span class="cstat-no" title="statement not covered" >        const exists = await fs.access(skillsDir).then(() =&gt; true).catch(() =&gt; false);</span>
+<span class="cstat-no" title="statement not covered" >        if (!exists) {</span>
+<span class="cstat-no" title="statement not covered" >          this.logger.info(`Skills directory not found at ${skillsDir}, skipping.`);</span>
+<span class="cstat-no" title="statement not covered" >          continue;</span>
 <span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        const entries = await fs.readdir(skillsDir, { withFileTypes: true });</span>
+<span class="cstat-no" title="statement not covered" >        for (const entry of entries) {</span>
+<span class="cstat-no" title="statement not covered" >          if (entry.isDirectory()) {</span>
+<span class="cstat-no" title="statement not covered" >            await this.loadSkill(path.join(skillsDir, entry.name), entry.name);</span>
+<span class="cstat-no" title="statement not covered" >          }</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >        </span>
+<span class="cstat-no" title="statement not covered" >        this.logger.info(`Loaded skills from ${skillsDir}. Total skills so far: ${this.skills.size}`);</span>
+<span class="cstat-no" title="statement not covered" >      } catch (error) {</span>
+<span class="cstat-no" title="statement not covered" >        this.logger.error(`Error discovering skills in ${skillsDir}: ${error}`);</span>
 <span class="cstat-no" title="statement not covered" >      }</span>
-<span class="cstat-no" title="statement not covered" >      </span>
-<span class="cstat-no" title="statement not covered" >      this.logger.info(`Loaded ${this.skills.size} agent skills from ${skillsDir}`);</span>
-<span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
-<span class="cstat-no" title="statement not covered" >      this.logger.error(`Error discovering skills: ${error}`);</span>
 <span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >  }</span>
 <span class="cstat-no" title="statement not covered" ></span>
@@ -319,7 +334,7 @@
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-07-08T09:56:41.498Z
+                at 2026-07-14T11:18:27.417Z
             </div>
         <script src="../prettify.js"></script>
         <script>

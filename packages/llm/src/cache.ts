@@ -71,13 +71,32 @@ export class LLMCache {
     }
   }
 
+  private saveTimeout: NodeJS.Timeout | null = null;
+  private isSaving: boolean = false;
+  private pendingSave: boolean = false;
+
   private saveCache(): void {
-    try {
-      // Save as array of entries to preserve LRU order
-      fs.writeFileSync(this.cacheFilePath, JSON.stringify(Array.from(this.cacheData.entries())), 'utf8');
-    } catch {
-      // ignore
-    }
+    if (this.saveTimeout) return;
+    this.saveTimeout = setTimeout(async () => {
+      this.saveTimeout = null;
+      if (this.isSaving) {
+        this.pendingSave = true;
+        return;
+      }
+      this.isSaving = true;
+      try {
+        const data = JSON.stringify(Array.from(this.cacheData.entries()));
+        await fs.promises.writeFile(this.cacheFilePath, data, 'utf8');
+      } catch {
+        // ignore
+      } finally {
+        this.isSaving = false;
+        if (this.pendingSave) {
+          this.pendingSave = false;
+          this.saveCache();
+        }
+      }
+    }, 1000); // 1s debounce
   }
 
   private generateKey(request: LLMRequest): string {

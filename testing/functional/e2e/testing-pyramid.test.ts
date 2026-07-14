@@ -3,13 +3,13 @@ import { WhisperSTT, LocalTTS } from '../../../packages/offline-ai/src/speech-se
 import { AudioProcessor } from '../../../packages/offline-ai/src/audio-processor';
 import { VoiceRecorder } from '../../../packages/offline-ai/src/voice-recorder';
 import { ToolRegistry } from '../../../packages/sandbox/src/registry';
-import { ToolExecutor } from '../sandbox/src/executor';
-import { DAGExecutor } from '../agents/src/tools/dag-executor';
-import { SpencerAgent } from '../agents/src/spencer-agent';
-import { MetricsCollector } from '../core/src/metrics';
+import { ToolExecutor } from '../../../packages/sandbox/src/executor';
+import { DAGExecutor } from '../../../packages/agents/src/tools/dag-executor';
+import { SpencerAgent } from '../../../packages/agents/src/spencer-agent';
+import { MetricsCollector } from '../../../packages/core/src/metrics';
 import { CoreLogger } from '@aios/core';
-import { fileTools } from '../sandbox/src/file-tools';
-import { getVoiceTools } from '../agents/src/tools/voice-tools';
+import { fileTools } from '../../../packages/sandbox/src/file-tools';
+import { getVoiceTools } from '../../../packages/agents/src/tools/voice-tools';
 
 // Setup Mock Registry for tests
 const mockLogger = CoreLogger.getInstance();
@@ -263,7 +263,7 @@ describe('Spencer Production testing-pyramid', () => {
 
       const expo = metrics.renderExposition();
       expect(expo).toContain('agent_calls_total{agent_name="spencer"} 1');
-      expect(expo).toContain('stt_latency_ms{model="base",le="500"} 1');
+      expect(expo).toContain('stt_latency_ms_bucket{model="base",le="500"} 1');
     });
   });
 

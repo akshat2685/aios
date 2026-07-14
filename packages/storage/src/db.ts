@@ -57,12 +57,29 @@ export class SQLiteStorage {
 
   query(sql: string, params: any[] = []) {
     if (!this.db) throw new Error("Database not initialized");
-    return this.db.exec(sql, params);
+    if (!params || params.length === 0) {
+      return this.db.exec(sql);
+    }
+    const stmt = this.db.prepare(sql);
+    stmt.bind(params);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.get());
+    }
+    const columns = stmt.getColumnNames();
+    stmt.free();
+    return results.length > 0 ? [{ columns, values: results }] : [];
   }
 
   run(sql: string, params: any[] = []) {
     if (!this.db) throw new Error("Database not initialized");
-    this.db.run(sql, params);
+    if (!params || params.length === 0) {
+      this.db.run(sql);
+    } else {
+      const stmt = this.db.prepare(sql);
+      stmt.run(params);
+      stmt.free();
+    }
     this.save();
   }
 }

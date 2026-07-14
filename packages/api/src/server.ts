@@ -9,9 +9,19 @@ process.env.AIOS_IPC_SECRET = IPC_SECRET; // Ensure it's available globally
 
 const authMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const token = req.headers['authorization'] || req.headers['x-ipc-token'];
-  if (!token || token !== `Bearer ${IPC_SECRET}`) {
+  const expectedToken = `Bearer ${IPC_SECRET}`;
+  
+  if (!token || typeof token !== 'string' || token.length !== expectedToken.length) {
     return res.status(401).json({ error: 'Unauthorized: Invalid IPC token' });
   }
+  
+  const tokenBuffer = Buffer.from(token);
+  const expectedBuffer = Buffer.from(expectedToken);
+  
+  if (!crypto.timingSafeEqual(tokenBuffer, expectedBuffer)) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid IPC token' });
+  }
+  
   next();
 };
 

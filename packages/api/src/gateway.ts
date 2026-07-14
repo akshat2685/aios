@@ -9,6 +9,16 @@ const rateLimits: Map<string, { count: number, resetTime: number }> = new Map();
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
 const MAX_REQUESTS_PER_WINDOW = 100;
 
+// Periodic cleanup to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of rateLimits.entries()) {
+    if (now >= value.resetTime) {
+      rateLimits.delete(key);
+    }
+  }
+}, RATE_LIMIT_WINDOW_MS);
+
 // Middleware: Enforces Rate Limits
 function rateLimiter(req: Request, res: Response, next: NextFunction): void {
   const apiKey = req.headers['x-api-key'] as string;
@@ -56,11 +66,24 @@ function authAndQuotaManager(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
+import { InputValidator } from '../../security/src/input-validation';
+
+// Middleware: Validate Payload
+function payloadValidator(req: Request, res: Response, next: NextFunction): void {
+  const payloadStr = JSON.stringify(req.body);
+  if (!InputValidator.validateNoScripts(payloadStr)) {
+    res.status(400).json({ error: 'Invalid payload: Contains forbidden script elements' });
+    return;
+  }
+  next();
+}
+
 // Secure ingress routing mechanism
 export const gatewayRouter = express.Router();
 
 gatewayRouter.use(rateLimiter);
 gatewayRouter.use(authAndQuotaManager);
+gatewayRouter.use(payloadValidator);
 
 // Route external traffic to the orchestrator
 gatewayRouter.post('/orchestrator/v1/execute', (req: Request, res: Response) => {

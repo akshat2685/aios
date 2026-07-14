@@ -40,6 +40,7 @@ export class ReflectionLoop {
       
       const prompt = `You are the AIOS Reflection Loop.
 Based on the jwilger/agent-skills@session-reflection pattern, analyze the following task failure and generate a lesson learned and a future recommendation.
+Strictly adhere to the AIOS principles: Local-first execution, Enterprise Security, Zero Trust, Autonomous Software Engineering, high performance, low latency, and zero hallucinations.
 
 Task: ${details.task}
 Solution Attempted: ${details.solution}

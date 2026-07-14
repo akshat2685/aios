@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
-const qdrantDockerComposePath = path.join(__dirname, '..', '..', 'docker', 'docker-compose.yml');
+const qdrantDockerComposePath = path.join(__dirname, '..', 'docker-compose.yml');
 
 async function startQdrant() {
   try {

@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import * as os from 'os';
 import chokidar from 'chokidar';
+import vm from 'vm';
 import { CoreLogger } from '@aios/core';
 import { AIOSPlugin, AgentTool, Workflow, PluginAPI, PluginStorage, PluginLogger, PluginEventBus } from '@aios/types';
 import { EventEmitter } from 'events';
@@ -17,6 +18,7 @@ export class PluginManager {
   public toolRegistry: Map<string, AgentTool> = new Map();
   public actionRegistry: Map<string, any> = new Map();
   public workflowRegistry: Map<string, Workflow> = new Map();
+  private pluginAssets: Map<string, { tools: string[], actions: string[], workflows: string[] }> = new Map();
   
   private watcher?: chokidar.FSWatcher;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -159,7 +161,18 @@ export class PluginManager {
         delete require.cache[require.resolve(indexPath)];
       }
 
-      const pluginFactory = require(indexPath);
+      const code = await fs.readFile(indexPath, 'utf-8');
+      const sandbox = {
+        require: require,
+        console: console,
+        module: { exports: {} },
+        exports: {}
+      };
+      
+      vm.createContext(sandbox);
+      vm.runInContext(code, sandbox);
+      const pluginFactory = sandbox.module.exports as any;
+
       if (typeof pluginFactory !== 'function') {
         throw new Error(`Plugin index.js must export a factory function`);
       }
@@ -196,11 +209,15 @@ export class PluginManager {
   }
 
   private registerPluginContents(plugin: AIOSPlugin) {
+    const assets = { tools: [] as string[], actions: [] as string[], workflows: [] as string[] };
+    const pluginId = plugin.manifest.id;
+
     if (plugin.getTools) {
       try {
         const tools = plugin.getTools();
         for (const tool of tools) {
           this.toolRegistry.set(tool.name, tool); // Using name instead of id for simplicity, or prefix it
+          assets.tools.push(tool.name);
         }
         this.logger.info(`Registered ${tools.length} tools for ${plugin.manifest.id}`);
       } catch (e: any) {
@@ -212,7 +229,9 @@ export class PluginManager {
       try {
         const actions = plugin.getActions();
         for (const [key, handler] of Object.entries(actions)) {
-          this.actionRegistry.set(`${plugin.manifest.id}.${key}`, handler);
+          const actionKey = `${plugin.manifest.id}.${key}`;
+          this.actionRegistry.set(actionKey, handler);
+          assets.actions.push(actionKey);
         }
       } catch (e: any) {
         this.logger.error(`Error loading actions for ${plugin.manifest.id}: ${e.message}`);
@@ -224,20 +243,32 @@ export class PluginManager {
         const workflows = plugin.getWorkflows();
         for (const wf of workflows) {
           this.workflowRegistry.set(wf.id, wf);
+          assets.workflows.push(wf.id);
         }
       } catch (e: any) {
         this.logger.error(`Error loading workflows for ${plugin.manifest.id}: ${e.message}`);
       }
     }
+
+    this.pluginAssets.set(pluginId, assets);
   }
 
   private unregisterPluginContents(pluginId: string) {
-    // Naive cleanup: Iterate registries and remove entries belonging to this plugin
-    // (A real implementation would track exactly what each plugin registered)
-    
-    // Cleanup toolRegistry (Assuming tool naming convention or full flush)
-    // For now, if we hot-reload, the next load will just overwrite.
-    // A complete implementation would map them properly.
+    const assets = this.pluginAssets.get(pluginId);
+    if (!assets) return;
+
+    for (const tool of assets.tools) {
+      this.toolRegistry.delete(tool);
+    }
+    for (const action of assets.actions) {
+      this.actionRegistry.delete(action);
+    }
+    for (const workflow of assets.workflows) {
+      this.workflowRegistry.delete(workflow);
+    }
+
+    this.pluginAssets.delete(pluginId);
+    this.logger.info(`Unregistered contents for plugin: ${pluginId}`);
   }
 
   async unloadPlugin(pluginId: string) {

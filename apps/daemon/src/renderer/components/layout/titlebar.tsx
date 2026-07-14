@@ -3,7 +3,7 @@ import { Minus, X, Cloud, Server } from 'lucide-react';
 import { getElectronAPI } from '@/lib/electron-api';
 import { useAppStore } from '@/stores/app-store';
 import { cn } from '@/lib/utils';
-import { GlassContainer } from '../ui/glass';
+import { GlassContainer } from '@aios/ui';
 
 export function Titlebar() {
   const api = getElectronAPI();
