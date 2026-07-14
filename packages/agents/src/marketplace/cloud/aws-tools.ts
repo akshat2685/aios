@@ -15,8 +15,17 @@ export function getAwsTools(logger: CoreLogger): AgentTool[] {
       },
       execute: async ({ templateContent }) => {
         logger.info('Analyzing CloudFormation template...');
-        // Mock implementation
-        return 'Analysis complete: No critical errors found. Suggestion: add DeletionPolicy to stateful resources.';
+        const issues: string[] = [];
+        if (!templateContent.includes('DeletionPolicy')) {
+          issues.push('Suggestion: add DeletionPolicy to stateful resources.');
+        }
+        if (templateContent.includes('"Effect": "Allow"') && (templateContent.includes('"Action": "*"') || templateContent.includes('"Action":"*"'))) {
+          issues.push('Critical: Overly permissive IAM role found (Action: *).');
+        }
+        if (templateContent.includes('0.0.0.0/0')) {
+          issues.push('Warning: Open security group rule detected (0.0.0.0/0).');
+        }
+        return issues.length > 0 ? 'Analysis complete with findings:\n' + issues.join('\n') : 'Analysis complete: No critical errors found. Best practices appear to be followed.';
       }
     },
     {
@@ -33,10 +42,22 @@ export function getAwsTools(logger: CoreLogger): AgentTool[] {
         },
         required: ['resources']
       },
-      execute: async ({ resources }) => {
+      execute: async ({ resources }: { resources: string[] }) => {
         logger.info(`Estimating AWS costs for: ${resources.join(', ')}`);
-        // Mock implementation
-        return `Estimated monthly cost for [${resources.join(', ')}] is $45.20. Note: This is a rough estimation.`;
+        let totalCost = 0;
+        const breakdown: string[] = [];
+        for (const res of resources) {
+          let cost = 10.0; // Base generic cost
+          const lowerRes = res.toLowerCase();
+          if (lowerRes.includes('t3.micro')) cost = 7.50;
+          else if (lowerRes.includes('t3.large')) cost = 60.00;
+          else if (lowerRes.includes('s3')) cost = 5.00;
+          else if (lowerRes.includes('rds')) cost = 15.00;
+          
+          totalCost += cost;
+          breakdown.push(`- ${res}: ~$${cost.toFixed(2)}/mo`);
+        }
+        return `Estimated monthly cost is $${totalCost.toFixed(2)}.\nBreakdown:\n${breakdown.join('\n')}\nNote: This is a rough estimation.`;
       }
     },
     {
@@ -51,7 +72,22 @@ export function getAwsTools(logger: CoreLogger): AgentTool[] {
       },
       execute: async ({ policyJson }) => {
         logger.info('Checking IAM policy...');
-        return 'IAM Policy check: Policy looks valid. Warning: Contains "Action": "*" which violates least privilege principle.';
+        try {
+          const policy = JSON.parse(policyJson);
+          const statements = Array.isArray(policy.Statement) ? policy.Statement : [policy.Statement].filter(Boolean);
+          let hasWildcard = false;
+          for (const stmt of statements) {
+            if (stmt.Effect === 'Allow' && (stmt.Action === '*' || (Array.isArray(stmt.Action) && stmt.Action.includes('*')) || stmt.Resource === '*')) {
+              hasWildcard = true;
+            }
+          }
+          if (hasWildcard) {
+            return 'IAM Policy check: Valid JSON. Warning: Contains wildcard "*" in Action or Resource which violates least privilege principle.';
+          }
+          return 'IAM Policy check: Policy looks valid and secure.';
+        } catch (e) {
+          return 'IAM Policy check: Invalid JSON format.';
+        }
       }
     }
   ];

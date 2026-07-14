@@ -25,13 +25,18 @@ export class MemoryStoragePostprocessor implements IPostprocessor {
       },
       createdAt: context.versionInfo.createdAt,
       updatedAt: context.versionInfo.updatedAt,
-      // Pass vector directly if it exists, Qdrant memory client might accept it or need it in a specific format
-      // In qdrant-client.ts addMany, it fetches embedding if it doesn't exist. If we pass vector, we'll need to adapt it.
       vector: chunk.vector
     }));
 
-    await this.memoryClient.addMany(records);
-
+    const storageStartTime = Date.now();
+    let storageErrorCount = 0;
+    try {
+      await this.memoryClient.addMany(records);
+    } catch (e) {
+      storageErrorCount++;
+      throw e;
+    }
+    const storageDurationMs = Date.now() - storageStartTime;
     const recordIds = records.map(r => r.id);
 
     // Emit Storage Event
@@ -46,13 +51,29 @@ export class MemoryStoragePostprocessor implements IPostprocessor {
         collection: 'aios_memory'
       },
       metrics: {
-        durationMs: 0,
-        errorCount: 0,
+        durationMs: storageDurationMs,
+        errorCount: storageErrorCount,
         retryCount: 0
       }
     } as MemoryStoredEvent);
 
-    // Emit Index Event (simulated)
+    // Real logic for Index Updated Event
+    const indexStartTime = Date.now();
+    let indexErrorCount = 0;
+    let retryCount = 0;
+    try {
+      let stats = await this.memoryClient.getStats();
+      // Poll until the index status is 'green' (or equivalent 'ok' state)
+      while (stats && stats.status !== 'green' && stats.status !== 'unreachable' && retryCount < 10) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        stats = await this.memoryClient.getStats();
+        retryCount++;
+      }
+    } catch (e) {
+      indexErrorCount++;
+    }
+    const indexDurationMs = Date.now() - indexStartTime;
+
     this.eventEmitter.emit('IndexUpdated', {
       id: uuidv4(),
       type: 'IndexUpdated',
@@ -63,9 +84,9 @@ export class MemoryStoragePostprocessor implements IPostprocessor {
         recordIds
       },
       metrics: {
-        durationMs: 0,
-        errorCount: 0,
-        retryCount: 0
+        durationMs: indexDurationMs,
+        errorCount: indexErrorCount,
+        retryCount
       }
     } as IndexUpdatedEvent);
   }

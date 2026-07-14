@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run build:packages\" \"cd apps/daemon && npm run dev\"",
+    "start": "npm run build && node apps/daemon/dist/main.js",
     "build:daemon": "cd apps/daemon && npm run build",
     "dev:renderer": "cd apps/daemon && npm run dev:renderer",
     "build": "npm run build:packages && npm run build:apps",

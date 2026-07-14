@@ -31,14 +31,14 @@ jobs:
       run: npm run lint
       continue-on-error: true
 
-    - name: Typecheck codebase
-      run: npm run typecheck
-
     - name: Build packages
       run: npm run build:packages
 
     - name: Build Daemon Apps
       run: npm run build:apps
+
+    - name: Typecheck codebase
+      run: npm run typecheck
 
     - name: Run Tests & Coverage
       run: npm run test:coverage

@@ -24,7 +24,13 @@ export class MetricsCollector {
   }
 
   public registerMetric(name: string, help: string, type: 'counter' | 'gauge' | 'histogram'): void {
-    this.metrics.set(name, { help, type, values: new Map() });
+    if (type === 'histogram') {
+      this.metrics.set(name + '_bucket', { help, type, values: new Map() });
+      this.metrics.set(name + '_sum', { help: help + ' (sum)', type: 'counter', values: new Map() });
+      this.metrics.set(name + '_count', { help: help + ' (count)', type: 'counter', values: new Map() });
+    } else {
+      this.metrics.set(name, { help, type, values: new Map() });
+    }
   }
 
   public increment(name: string, labels: Record<string, string> = {}, value: number = 1): void {
@@ -45,8 +51,13 @@ export class MetricsCollector {
   }
 
   public observe(name: string, labels: Record<string, string>, value: number): void {
-    // Record histogram observations (simulated bucket updates for Prom compatibility)
-    this.increment(name, { ...labels, le: this.getHistogramBucket(value) });
+    const buckets = [100, 250, 500, 1000, 2000, Infinity];
+    for (const b of buckets) {
+      if (value <= b) {
+        const le = b === Infinity ? '+Inf' : b.toString();
+        this.increment(name + '_bucket', { ...labels, le });
+      }
+    }
     this.increment(name + '_sum', labels, value);
     this.increment(name + '_count', labels, 1);
   }
@@ -73,14 +84,5 @@ export class MetricsCollector {
     if (entries.length === 0) return '';
     const items = entries.map(([k, v]) => `${k}="${v}"`).join(',');
     return `{${items}}`;
-  }
-
-  private getHistogramBucket(value: number): string {
-    if (value <= 100) return '100';
-    if (value <= 250) return '250';
-    if (value <= 500) return '500';
-    if (value <= 1000) return '1000';
-    if (value <= 2000) return '2000';
-    return '+Inf';
   }
 }

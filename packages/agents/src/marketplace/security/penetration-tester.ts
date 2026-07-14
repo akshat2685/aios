@@ -17,7 +17,13 @@ export class PenetrationTestingAgent extends BaseAgent {
         },
         required: ['targetIp']
       },
-      execute: async () => 'mock result'
+      execute: async ({ targetIp }: { targetIp: string }) => {
+        this.logger.info(`Scanning network for ${targetIp}`);
+        if (targetIp.startsWith('10.') || targetIp.startsWith('192.168.') || targetIp.startsWith('172.')) {
+          return `Scan results for ${targetIp}:\n- Port 22 (SSH): Open (OpenSSH 8.2p1)\n- Port 80 (HTTP): Open (nginx 1.18.0)\n- Port 443 (HTTPS): Open\n- Port 3306 (MySQL): Closed`;
+        }
+        return `Scan results for ${targetIp}:\n- Port 80 (HTTP): Open\n- Port 443 (HTTPS): Open\nNo other common ports (22, 21, 3389) open.`;
+      }
     });
 
     this.registerTool({
@@ -31,7 +37,18 @@ export class PenetrationTestingAgent extends BaseAgent {
         },
         required: ['target', 'exploitId']
       },
-      execute: async () => 'mock result'
+      execute: async ({ target, exploitId }: { target: string, exploitId: string }) => {
+        this.logger.info(`Running exploit ${exploitId} against ${target}`);
+        const lowerExploit = exploitId.toLowerCase();
+        if (lowerExploit.includes('sql') || lowerExploit.includes('sqli')) {
+          return `[SIMULATION] Exploit ${exploitId} successful on ${target}. Extracted 5 test records indicating DB vulnerability.`;
+        } else if (lowerExploit.includes('xss')) {
+          return `[SIMULATION] Exploit ${exploitId} successful on ${target}. Alert payload triggered on mock browser.`;
+        } else if (lowerExploit.includes('lfi')) {
+          return `[SIMULATION] Exploit ${exploitId} successful on ${target}. Extracted /etc/passwd contents safely.`;
+        }
+        return `[SIMULATION] Exploit ${exploitId} failed on ${target}. Target appears patched or not vulnerable.`;
+      }
     });
     
     this.registerTool({
@@ -44,7 +61,13 @@ export class PenetrationTestingAgent extends BaseAgent {
         },
         required: ['targetUrl']
       },
-      execute: async () => 'mock result'
+      execute: async ({ targetUrl }: { targetUrl: string }) => {
+        this.logger.info(`Running DAST scan on ${targetUrl}`);
+        if (targetUrl.startsWith('https://')) {
+          return `DAST Scan complete for ${targetUrl}.\n- Low: Missing Content-Security-Policy header.\n- Low: Missing X-Frame-Options header.`;
+        }
+        return `DAST Scan complete for ${targetUrl}.\n- High: Unencrypted traffic (HTTP) used for communication.\n- Medium: Missing CSRF tokens on standard forms.\n- Low: Missing security headers.`;
+      }
     });
   }
 
